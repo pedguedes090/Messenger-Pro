@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="mpro_commands_send_input" value="true" />
+    <boolean name="mpro_text_format" value="true" />
+    <boolean name="mpro_commands" value="true" />
+    <boolean name="mpro_conversation_typing_indicator" value="true" />
+    <string name="mpro_commands_allow_other">never</string>
+    <boolean name="mpro_disable_media_transcoder" value="false" />
+    <boolean name="mpro_debug_typing_capture" value="true" />
+    <boolean name="mpro_conversation_seen" value="true" />
+    <boolean name="mpro_debug_typing_force_block" value="false" />
+    <boolean name="mpro_image_default_camera" value="false" />
+    <boolean name="mpro_other_settings_longpress_top" value="true" />
+    <boolean name="mpro_conversation_lock" value="true" />
+    <boolean name="mpro_other_allow_logs" value="true" />
+</map>
+

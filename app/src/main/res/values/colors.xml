@@ -1,0 +1,22 @@
+<resources>
+    <color name="ic_launcher_background_color">#FDFDFD</color>
+
+    <!-- Primary and secondary colors (Messenger-inspired blue) -->
+    <color name="colorPrimary">#0084FF</color>
+    <color name="colorPrimaryContainer">#0066CC</color>
+    <color name="colorSecondary">#44BEC7</color>
+    <color name="colorSecondaryContainer">#018786</color>
+
+    <!-- On colors -->
+    <color name="colorOnPrimary">#FFFFFF</color>
+    <color name="colorOnSecondary">#000000</color>
+    <color name="colorOnSurface">#1C1B1F</color>
+    <color name="colorOnBackground">#000000</color>
+
+    <!-- Additional colors -->
+    <color name="colorSurface">#FFFFFF</color>
+    <color name="colorError">#B00020</color>
+    <color name="colorOnError">#FFFFFF</color>
+
+    <color name="colorSemiTransparentOverlay">#80000000</color>
+</resources>

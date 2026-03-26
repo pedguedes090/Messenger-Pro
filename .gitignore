@@ -1,0 +1,42 @@
+## Android / Gradle
+.gradle/
+.kotlin/
+**/build/
+build/
+app/debug/
+app/release/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+!releases/
+!releases/*.apk
+
+## Local machine config
+local.properties
+
+## IDE
+.idea/
+*.iml
+.vscode/
+
+## OS junk
+.DS_Store
+Thumbs.db
+
+## Python tooling (tools/ scripts)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+## Reverse-engineering artifacts
+apkmess/
+apkmess/extracted/
+apkmess/*.apk
+
+## Logs
+*.log

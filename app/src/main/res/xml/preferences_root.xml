@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <Preference
+        android:key="mpro_root_quick_tip"
+        android:title="@string/settings_quick_tip_title"
+        android:summary="@string/settings_quick_tip_summary"
+        android:selectable="false"
+        android:icon="@android:drawable/ic_dialog_info" />
+
+    <PreferenceCategory
+        android:title="@string/settings_category_customize" />
+
+    <Preference
+        android:key="mpro_root_features"
+        android:title="@string/pref_features"
+        android:summary="@string/pref_features_summary"
+        android:icon="@android:drawable/ic_menu_manage"/>
+
+    <Preference
+        android:key="mpro_root_toolbar"
+        android:title="@string/pref_toolbar"
+        android:summary="@string/pref_toolbar_summary"
+        android:icon="@android:drawable/ic_menu_sort_by_size"/>
+
+    <Preference
+        android:title="@string/pref_advanced"
+        android:key="mpro_root_advanced"
+        android:summary="@string/pref_advanced_summary"
+        android:icon="@android:drawable/ic_menu_preferences"/>
+
+    <PreferenceCategory
+        android:title="@string/settings_category_support" />
+
+    <Preference
+        android:title="@string/pref_about"
+        android:key="mpro_root_about"
+        android:summary="@string/pref_about_summary"
+        android:icon="@android:drawable/ic_menu_info_details"/>
+</PreferenceScreen>

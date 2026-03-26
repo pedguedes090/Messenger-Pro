@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Reply Preference -->
+    <string-array name="reply_entries">
+        <item>Trả lời</item>
+        <item>Trả lời tất cả</item>
+    </string-array>
+
+    <string name="left">Trái</string>
+    <string name="right">Phải</string>
+    <string name="up">Lên</string>
+    <string name="down">Xuống</string>
+    <string name="finger_count_1">1 ngón tay</string>
+    <string name="finger_count_2">2 ngón tay</string>
+    <string name="finger_count_3">3 ngón tay</string>
+    <string name="finger_count_4">4 ngón tay</string>
+    <string name="finger_count_5">5 ngón tay</string>
+    <string name="never">Không bao giờ</string>
+    <string name="when_inside_conversation">Khi đang trong hội thoại</string>
+    <string name="always_not_recommended">Luôn luôn (không khuyến nghị)</string>
+</resources>

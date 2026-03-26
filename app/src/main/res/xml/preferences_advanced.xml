@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory
+        android:title="@string/settings_category_diagnostics" />
+
+    <Preference
+        android:title="@string/pref_unobfuscator"
+        android:key="mpro_advanced_unobfuscator"
+        android:summary="@string/pref_unobfuscator_summary" />
+
+    <Preference
+        android:title="@string/pref_apicodes"
+        android:key="mpro_advanced_apicodes"
+        android:summary="@string/pref_apicodes_summary" />
+
+    <Preference
+        android:title="@string/pref_hookstate"
+        android:key="mpro_advanced_hookstate"
+        android:summary="@string/pref_hookstate_summary" />
+
+    <Preference
+        android:title="@string/pref_chat_history"
+        android:key="mpro_advanced_chat_history"
+        android:summary="@string/pref_chat_history_summary" />
+
+    <PreferenceCategory
+        android:title="@string/settings_category_debug" />
+
+    <Preference
+        android:key="mpro_debug_warning"
+        android:title="@string/settings_debug_warning_title"
+        android:summary="@string/settings_debug_warning_summary"
+        android:selectable="false"
+        android:icon="@android:drawable/ic_dialog_alert" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_debug_typing_capture"
+        android:title="@string/pref_debug_typing_capture"
+        android:summary="@string/pref_debug_typing_capture_summary" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_debug_typing_force_block"
+        android:title="@string/pref_debug_typing_force_block"
+        android:summary="@string/pref_debug_typing_force_block_summary" />
+</PreferenceScreen>

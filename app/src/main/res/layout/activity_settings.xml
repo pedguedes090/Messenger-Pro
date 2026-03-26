@@ -1,0 +1,46 @@
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/settings_toolbar_background"
+        android:elevation="0dp"
+        app:elevation="0dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="@android:color/transparent"
+            app:title="@string/title_activity_settings"
+            app:subtitle="@string/app_name"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:navigationIconTint="@color/colorOnPrimary"
+            app:subtitleTextColor="@color/colorOnPrimary"
+            app:titleCentered="true"
+            app:titleTextColor="@color/colorOnPrimary" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <FrameLayout
+        android:id="@+id/settings"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+        android:layout_gravity="end|bottom"
+        android:id="@+id/fab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:text="@string/settings_apply_changes"
+        android:contentDescription="@string/settings_apply_changes"
+        app:backgroundTint="@color/colorPrimary"
+        app:icon="@drawable/ic_save"
+        app:iconTint="@color/colorOnPrimary"
+        app:tint="@color/colorOnPrimary" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

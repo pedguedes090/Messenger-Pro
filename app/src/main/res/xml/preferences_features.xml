@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory
+        android:key="category_conversation_key"
+        android:title="@string/pref_category_conversation"/>
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_conversation_seen"
+        android:title="@string/pref_disable_msg_seen"
+        android:summary="@string/pref_disable_msg_seen_summary" />
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_conversation_typing_indicator"
+        android:title="@string/pref_disable_typing_indicator"
+        android:summary="@string/pref_disable_typing_indicator_summary" />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="mpro_conversation_lock"
+        android:title="@string/pref_enable_conversation_lock"
+        android:summary="@string/pref_enable_conversation_lock_summary" />
+
+    <PreferenceCategory
+        android:key="category_text_key"
+        android:title="@string/pref_category_text"/>
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="mpro_text_format"
+        android:title="@string/pref_enable_formatting"
+        android:summary="@string/pref_enable_formatting_summary" />
+
+    <PreferenceCategory
+        android:key="category_command_key"
+        android:title="@string/pref_category_commands"/>
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="mpro_commands"
+        android:title="@string/pref_enable_commands"
+        android:summary="@string/pref_enable_commands_summary" />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="mpro_commands_send_input"
+        android:title="@string/pref_send_command_input"
+        android:summary="@string/pref_send_command_input_summary" />
+    <ListPreference
+        android:defaultValue="never"
+        android:key="mpro_commands_allow_other"
+        android:title="@string/pref_allow_other_command"
+        android:entries="@array/allow_other_command"
+        android:entryValues="@array/allow_other_command_values"
+        app:useSimpleSummaryProvider="true" />
+    <Preference
+        android:key="mpro_commands_ai_config"
+        android:title="@string/pref_aiconfig"
+        android:summary="@string/pref_aiconfig_summary" />
+
+    <PreferenceCategory
+        android:key="category_image_key"
+        android:title="@string/pref_category_image" />
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_image_default_camera"
+        android:title="@string/pref_default_camera"
+        android:summary="@string/pref_default_camera_summary" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_disable_media_transcoder"
+        android:title="@string/pref_disable_media_transcoder"
+        android:summary="@string/pref_disable_media_transcoder_summary" />
+    <PreferenceCategory
+        android:key="category_other_key"
+        android:title="@string/pref_category_other" />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="mpro_other_settings_longpress_top"
+        android:title="@string/pref_other_settings_longpress_top"
+        android:summary="@string/pref_other_settings_longpress_top_summary" />
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_other_allow_logs"
+        android:title="@string/pref_allow_logs"
+        android:summary="@string/pref_allow_logs_summary" />
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_other_message_history"
+        android:title="@string/pref_message_history"
+        android:summary="@string/pref_message_history_summary" />
+</PreferenceScreen>

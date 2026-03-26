@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="ButtonReset" parent="Widget.AppCompat.ImageButton">
+        <item name="cornerRadius">16dp</item>
+    </style>
+
+    <style name="ThemeOverlay.MPro.MaterialAlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="alertDialogStyle">@style/MPro.MaterialAlertDialog</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/TextAppearance.MPro.Dialog.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/TextAppearance.MPro.Dialog.Body</item>
+    </style>
+
+    <style name="MPro.MaterialAlertDialog" parent="MaterialAlertDialog.Material3">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.MPro.Dialog</item>
+    </style>
+
+    <style name="ShapeAppearance.MPro.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <style name="TextAppearance.MPro.Dialog.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.MPro.Dialog.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+
+    <style name="TextAppearance.MPro.Dialog.Url" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+
+    <style name="Widget.MPro.DialogButton.Cancel" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="Widget.MPro.DialogButton.Other" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="strokeColor">@color/colorPrimary</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+    </style>
+
+    <style name="Widget.MPro.DialogButton.Download" parent="Widget.Material3.Button">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/colorOnPrimary</item>
+        <item name="backgroundTint">@color/colorPrimary</item>
+        <item name="iconTint">@color/colorOnPrimary</item>
+    </style>
+</resources>

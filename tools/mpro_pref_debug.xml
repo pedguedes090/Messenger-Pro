@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="mpro_other_allow_logs" value="true" />
+    <boolean name="mpro_conversation_typing_indicator" value="true" />
+    <boolean name="mpro_debug_typing_capture" value="true" />
+    <boolean name="mpro_debug_typing_force_block" value="false" />
+</map>
