@@ -1,5 +1,6 @@
 package tn.amin.mpro2.features.action;
 
+import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -42,6 +43,7 @@ import tn.amin.mpro2.hook.all.MessagesDisplayHook;
 import tn.amin.mpro2.orca.OrcaGateway;
 import tn.amin.mpro2.orca.wrapper.MessageWrapper;
 import tn.amin.mpro2.orca.wrapper.MessagesCollectionWrapper;
+import tn.amin.mpro2.ui.ModuleContextWrapper;
 import tn.amin.mpro2.ui.toolbar.ToolbarButtonCategory;
 
 public class DownloadVideoFeature extends Feature
@@ -381,7 +383,7 @@ public class DownloadVideoFeature extends Feature
     }
 
     private void showUrlDialog(Context context, String prefillUrl) {
-        ContextThemeWrapper dialogContext = new ContextThemeWrapper(context, R.style.AppTheme);
+        ContextThemeWrapper dialogContext = createDialogContext(context);
         View dialogView = LayoutInflater.from(dialogContext).inflate(R.layout.dialog_video_download_input, null, false);
         TextInputEditText input = dialogView.findViewById(R.id.input_video_url);
 
@@ -412,9 +414,20 @@ public class DownloadVideoFeature extends Feature
     }
 
     private MaterialAlertDialogBuilder newDialogBuilder(Context context) {
-        ContextThemeWrapper dialogContext = new ContextThemeWrapper(context, R.style.AppTheme);
-        return new MaterialAlertDialogBuilder(dialogContext)
+        return new MaterialAlertDialogBuilder(createDialogContext(context))
                 .setIcon(R.drawable.ic_toolbar_download);
+    }
+
+    private ContextThemeWrapper createDialogContext(Context context) {
+        Context baseContext = context;
+        Activity activity = gateway.getActivity();
+        if (activity != null) {
+            baseContext = activity;
+        }
+        if (gateway.res != null) {
+            baseContext = new ModuleContextWrapper(baseContext, gateway.res.unwrap());
+        }
+        return new ContextThemeWrapper(baseContext, R.style.AppTheme);
     }
 
     private void showCustomConfirmDialog(Context context,
@@ -422,7 +435,7 @@ public class DownloadVideoFeature extends Feature
                                          boolean showOtherUrl,
                                          @Nullable Runnable onOtherUrl,
                                          @Nullable Runnable onDismiss) {
-        ContextThemeWrapper dialogContext = new ContextThemeWrapper(context, R.style.AppTheme);
+        ContextThemeWrapper dialogContext = createDialogContext(context);
         View dialogView = LayoutInflater.from(dialogContext).inflate(R.layout.dialog_video_download_confirm, null, false);
 
         VideoDownloadManager.Platform platform = VideoDownloadManager.detectPlatform(videoUrl);
@@ -435,7 +448,7 @@ public class DownloadVideoFeature extends Feature
         MaterialButton buttonOther = dialogView.findViewById(R.id.button_other);
         MaterialButton buttonCancel = dialogView.findViewById(R.id.button_cancel);
 
-        titleView.setText(context.getString(R.string.video_download_dialog_title, platform.displayName));
+        titleView.setText(dialogContext.getString(R.string.video_download_dialog_title, platform.displayName));
         subtitleView.setText(R.string.video_download_dialog_subtitle);
         urlView.setText(formatForDialog(videoUrl));
 
@@ -474,7 +487,7 @@ public class DownloadVideoFeature extends Feature
                                            List<String> urls,
                                            boolean showOtherUrl,
                                            @Nullable Runnable onDismiss) {
-        ContextThemeWrapper dialogContext = new ContextThemeWrapper(context, R.style.AppTheme);
+        ContextThemeWrapper dialogContext = createDialogContext(context);
         View dialogView = LayoutInflater.from(dialogContext).inflate(R.layout.dialog_video_download_list, null, false);
 
         TextView titleView = dialogView.findViewById(R.id.dialog_list_title);
