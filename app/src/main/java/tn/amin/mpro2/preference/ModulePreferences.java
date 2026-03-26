@@ -69,6 +69,10 @@ public class ModulePreferences {
         return sp.getBoolean("mpro_debug_typing_force_block", false);
     }
 
+    public boolean isMailboxDiscoveryDebugEnabled() {
+        return sp.getBoolean("mpro_debug_mailbox_discovery", false);
+    }
+
     public int getToolbarX() {
         return sp.getInt("mpro_toolbar_x", 10);
     }

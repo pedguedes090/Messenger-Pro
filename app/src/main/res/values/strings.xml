@@ -127,6 +127,8 @@
     <string name="pref_debug_typing_capture_summary">Log candidate typing dispatch calls and arguments</string>
     <string name="pref_debug_typing_force_block">Typing force block (debug)</string>
     <string name="pref_debug_typing_force_block_summary">Block all typing-like dispatch candidates (use for diagnosis only)</string>
+    <string name="pref_debug_mailbox_discovery">Mailbox discovery (debug)</string>
+    <string name="pref_debug_mailbox_discovery_summary">Enable deep 7Da discovery hooks and detailed send-file diagnostics</string>
     <string name="pref_hookstate_summary">View hook activation status</string>
     <string name="pref_about_summary">Version info, support and links</string>
     <string name="threadkey_copied">ThreadKey copied to clipboard</string>
@@ -201,4 +203,5 @@
     <string name="video_download_cancel">Cancel</string>
     <string name="video_download_list_title">Detected video links</string>
     <string name="video_download_list_subtitle">Tap one link to open download confirmation</string>
+    <string name="video_download_already_fetching">Already fetching this video...</string>
 </resources>

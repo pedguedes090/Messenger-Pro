@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.lang.reflect.Field;
@@ -50,7 +51,7 @@ public class MessageReceivedHook extends BaseHook {
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                         MessagePayload payload = extractPayload(param.args, true);
                         if (!payload.isComplete()) {
-                            Logger.info("MessageReceivedHook: dispatch matched api but payload incomplete");
+                            Logger.verbose("MessageReceivedHook: dispatch matched api but payload incomplete");
                             return;
                         }
 
@@ -118,9 +119,9 @@ public class MessageReceivedHook extends BaseHook {
             );
         }
 
-        Logger.info("MessageReceivedHook[" + source + "]: sender=" + safeLog(payload.senderUserKey, 32)
+        Logger.verbose("MessageReceivedHook[" + source + "]: sender=" + safeLog(payload.senderUserKey, 32)
                 + " mid=" + safeLog(payload.messageId, 48)
-            + " tk=" + resolvedThreadKey
+                + " tk=" + resolvedThreadKey
                 + " message=" + safeLog(payload.message, 80));
 
         String listenerSenderUserKey = payload.senderUserKey != null ? payload.senderUserKey : "";
@@ -346,7 +347,7 @@ public class MessageReceivedHook extends BaseHook {
             return null;
         }
 
-        String lower = trimmed.toLowerCase();
+        String lower = trimmed.toLowerCase(Locale.ROOT);
         if (trimmed.startsWith("mid.") || trimmed.startsWith("fbid:") || USER_KEY_PATTERN.matcher(trimmed).matches()) {
             return null;
         }

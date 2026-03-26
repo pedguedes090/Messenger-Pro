@@ -3,11 +3,13 @@ package tn.amin.mpro2.orca.connector;
 import android.util.Base64;
 
 import androidx.core.util.Consumer;
+import androidx.core.util.Supplier;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import de.robv.android.xposed.XposedBridge;
@@ -25,6 +27,8 @@ import tn.amin.mpro2.orca.wrapper.AuthDataWrapper;
 import tn.amin.mpro2.util.XposedHilfer;
 
 public class MailboxConnector {
+    public static Supplier<Boolean> discoveryDebugSupplier = null;
+
     public final WeakReference<Object> mailbox;
     private final AuthDataWrapper authData;
     private final ClassLoader classLoader;
@@ -37,8 +41,12 @@ public class MailboxConnector {
     }
 
     public void set7Da(Object instance) {
+        Object current = captured7Da.get();
+        if (current == instance) {
+            return;
+        }
         captured7Da = new WeakReference<>(instance);
-        Logger.info("MailboxConnector: captured 7Da instance: " + instance.getClass().getName());
+        logDiscovery("MailboxConnector: captured 7Da instance: " + instance.getClass().getName());
     }
 
     public Object get7Da() {
@@ -57,7 +65,7 @@ public class MailboxConnector {
                 }
             }
         } catch (Throwable t) {
-            Logger.info("get7Da: lazy search failed: " + t.getMessage());
+            Logger.verbose("get7Da: lazy search failed: " + t.getMessage());
         }
         return null;
     }
@@ -77,7 +85,7 @@ public class MailboxConnector {
                         f.setAccessible(true);
                         Object val = f.get(root);
                         if (val != null && targetType.isInstance(val)) {
-                            Logger.info("Found 7Da at " + clazz.getName() + "." + f.getName());
+                            logDiscovery("Found 7Da at " + clazz.getName() + "." + f.getName());
                             return val;
                         }
                     } catch (Throwable ignored) {}
@@ -102,7 +110,7 @@ public class MailboxConnector {
                 clazz = clazz.getSuperclass();
             }
         } catch (Throwable t) {
-            Logger.info("findInstanceOfType error: " + t.getMessage());
+            Logger.verbose("findInstanceOfType error: " + t.getMessage());
         }
         return null;
     }
@@ -126,13 +134,13 @@ public class MailboxConnector {
             final Set<Method> newDispatchList = XposedHilfer.findAllMethods(MailboxSDKJNI, MessageSentHook.DISPATCH_METHOD_NEW);
             if (newDispatchList.size() == 1) {
                 final Method dispatch = newDispatchList.iterator().next();
-                Logger.info("sendText: using new dispatch (SDKJNI)");
+                logDiscovery("sendText: using new dispatch (SDKJNI)");
                 
                 // Log param types for diagnostics
                 Class<?>[] paramTypes = dispatch.getParameterTypes();
                 StringBuilder sb = new StringBuilder("sendText dispatch params: ");
                 for (Class<?> pt : paramTypes) sb.append(pt.getSimpleName()).append(",");
-                Logger.info(sb.toString());
+                logDiscovery(sb.toString());
                 
                 preDispatch(notificationScope -> {
                     try {
@@ -156,7 +164,7 @@ public class MailboxConnector {
                 return;
             }
         } catch (Throwable t) {
-            Logger.info("sendText: new dispatch not available, trying old");
+            Logger.verbose("sendText: new dispatch not available, trying old");
         }
 
         // Fallback: old CoreJNI dispatch
@@ -210,7 +218,7 @@ public class MailboxConnector {
     }
 
     public void sendSticker(final long stickerId, final long threadKey, final int delay, final String replyId) {
-        Logger.info("Sending sticker " + stickerId + "!");
+        Logger.verbose("Sending sticker " + stickerId + "!");
 
         final Class<?> MailboxCoreJNI = XposedHelpers.findClass(OrcaClassNames.MAILBOX_CORE_JNI, classLoader);
         final Set<Method> disptachList = XposedHilfer.findAllMethods(MailboxCoreJNI, "dispatchVIIIJJOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOZ");
@@ -244,7 +252,7 @@ public class MailboxConnector {
     }
 
     public void sendAttachment(MediaAttachment attachment, final long threadKey, final int delay, final String replyId) {
-        Logger.info("sendAttachment: file=" + attachment.path + " fileName=" + attachment.fileName + " threadKey=" + threadKey);
+        logDiscovery("sendAttachment: file=" + attachment.path + " fileName=" + attachment.fileName + " threadKey=" + threadKey);
 
         // Try calling 7Da.A0Q (sendFileAttachmentMessage) directly
         Object sdk7Da = captured7Da.get();
@@ -271,7 +279,7 @@ public class MailboxConnector {
                     String mimeType = attachment.fileName != null && attachment.fileName.endsWith(".jpg")
                             ? "image/jpeg" : "application/octet-stream";
                     if (attachment.fileName != null) {
-                        String lower = attachment.fileName.toLowerCase();
+                        String lower = attachment.fileName.toLowerCase(Locale.ROOT);
                         if (lower.endsWith(".png")) mimeType = "image/png";
                         else if (lower.endsWith(".gif")) mimeType = "image/gif";
                         else if (lower.endsWith(".mp4")) mimeType = "video/mp4";
@@ -281,7 +289,7 @@ public class MailboxConnector {
                     final String finalMimeType = mimeType;
                     final String filePath = attachment.path.getAbsolutePath();
 
-                    Logger.info("sendAttachment: calling 7Da.A0Q with threadKey=" + threadKeyEncoded
+                    logDiscovery("sendAttachment: calling 7Da.A0Q with threadKey=" + threadKeyEncoded
                             + " path=" + filePath + " name=" + attachment.fileName + " mime=" + finalMimeType);
 
                     // Call A0Q directly - it's a high-level coroutine method that handles its own threading
@@ -291,26 +299,29 @@ public class MailboxConnector {
                         try {
                             Object result = sendFile.invoke(sdk7Da, null, null, null,
                                     threadKeyEncoded, filePath, fName, finalMimeType, null);
-                            Logger.info("sendAttachment: 7Da.A0Q returned: " + result);
+                            logDiscovery("sendAttachment: 7Da.A0Q returned: " + result);
                         } catch (Throwable t) {
-                            Logger.error("sendAttachment: 7Da.A0Q failed: " + t.getMessage());
-                            Logger.error(t);
-                            if (t.getCause() != null) {
-                                Logger.error("sendAttachment: A0Q cause: " + t.getCause().getMessage());
-                                Logger.error(t.getCause());
+                            Logger.warn("sendAttachment: 7Da.A0Q failed, falling back: " + t.getMessage());
+                            if (isDiscoveryDebugEnabled()) {
+                                Logger.error(t);
+                                if (t.getCause() != null) {
+                                    Logger.error(t.getCause());
+                                }
                             }
                         }
                     }).start();
                     return;
                 } else {
-                    Logger.error("sendAttachment: A0Q method not found on 7Da");
+                    Logger.verbose("sendAttachment: A0Q method not found on 7Da");
                 }
             } catch (Throwable t) {
-                Logger.error("sendAttachment: 7Da approach failed: " + t.getMessage());
-                Logger.error(t);
+                Logger.warn("sendAttachment: 7Da approach failed, falling back: " + t.getMessage());
+                if (isDiscoveryDebugEnabled()) {
+                    Logger.error(t);
+                }
             }
         } else {
-            Logger.error("sendAttachment: No 7Da instance captured yet. Try sending a text message first to initialize.");
+            Logger.verbose("sendAttachment: no cached 7Da instance yet, falling back");
         }
 
         // Fallback: try old CoreJNI dispatch
@@ -331,7 +342,7 @@ public class MailboxConnector {
             final Set<Method> dispatchList = XposedHilfer.findAllMethods(MailboxCoreJNI, MessageSentHook.DISPATCH_METHOD);
             if (dispatchList.size() == 1) {
                 final Method dispatch = dispatchList.iterator().next();
-                Logger.info("sendAttachment: using old CoreJNI dispatch as fallback");
+                Logger.verbose("sendAttachment: using old CoreJNI dispatch as fallback");
 
                 preDispatch(notificationScope -> {
                     long time = System.currentTimeMillis() * 1000;
@@ -344,7 +355,7 @@ public class MailboxConnector {
                                 null, null, null, null, null, null, false, null, notificationScope
                         };
                         XposedBridge.invokeOriginalMethod(dispatch, null, dispatchParams);
-                        Logger.info("sendAttachment: old dispatch succeeded");
+                        Logger.verbose("sendAttachment: old dispatch succeeded");
                     } catch (Throwable t) {
                         Logger.error("sendAttachment: old dispatch failed: " + t.getMessage());
                         Logger.error(t);
@@ -400,11 +411,11 @@ public class MailboxConnector {
 
         new Thread(() -> {
             try {
-                Logger.info("Sending message in " + delay + " milliseconds...");
+                Logger.verbose("Sending message in " + delay + " milliseconds...");
                 Thread.sleep(delay);
                 executeAsync(() -> {
                     try {
-                        Logger.info("Inside async");
+                        Logger.verbose("Inside async");
 
                         final Object notificationScope = XposedHelpers.findConstructorExact(NotificationScope).newInstance();
                         dispatchExecutor.accept(notificationScope);
@@ -416,5 +427,17 @@ public class MailboxConnector {
                 Logger.error(t);
             }
         }).start();
+    }
+
+    private boolean isDiscoveryDebugEnabled() {
+        return discoveryDebugSupplier != null && Boolean.TRUE.equals(discoveryDebugSupplier.get());
+    }
+
+    private void logDiscovery(String message) {
+        if (isDiscoveryDebugEnabled()) {
+            Logger.info(message);
+        } else {
+            Logger.verbose(message);
+        }
     }
 }

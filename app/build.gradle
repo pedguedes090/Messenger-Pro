@@ -2,16 +2,14 @@ apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
 android {
-
-
+    compileSdk 35
 
     defaultConfig {
-        compileSdk 35
         applicationId "tn.amin.mpro2"
         minSdkVersion 26
         targetSdkVersion 35
-        versionCode 24
-        versionName "1.2.3"
+        versionCode 25
+        versionName "1.2.4"
 
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -22,13 +20,14 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
-        applicationVariants.all{
-            variant ->
-                variant.outputs.each{
-                    output->
-                        def name = "mPro-v${variant.versionName}.apk"
-                        output.outputFileName = name
-                }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.each { output ->
+            def suffix = variant.buildType.name == "release"
+                    ? "release-unsigned"
+                    : variant.buildType.name
+            output.outputFileName = "mPro-v${variant.versionName}-${suffix}.apk"
         }
     }
     compileOptions {
@@ -41,6 +40,7 @@ android {
 
     namespace 'tn.amin.mpro2'
     buildFeatures {
+        buildConfig true
         viewBinding true
     }
 }

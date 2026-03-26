@@ -116,7 +116,7 @@ public class SeenIndicatorHook extends BaseHook {
                     notifyListenersWithResult((listener) -> ((SeenIndicatorListener) listener).onSeenIndicator());
                     boolean allowSeen = !getListenersReturnValue().isConsumed || (Boolean) getListenersReturnValue().value;
                     if (!allowSeen) {
-                        Logger.info("SeenIndicatorHook: blocked seen dispatch method=" + methodName + " action=" + actionCode);
+                        Logger.verbose("SeenIndicatorHook: blocked seen dispatch method=" + methodName + " action=" + actionCode);
                         Method hookedMethod = (Method) param.method;
                         param.setResult(getDefaultReturnValue(hookedMethod.getReturnType()));
                     }

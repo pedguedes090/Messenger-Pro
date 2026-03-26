@@ -23,6 +23,7 @@ import androidx.annotation.DrawableRes;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Random;
 
@@ -126,7 +127,7 @@ public class OrcaExplorer {
 
     private static void hookAllDispatch(final String feature, ClassLoader classLoader) {
         Class<?> cls = XposedHelpers.findClass(
-                "com.facebook." + feature.toLowerCase() + ".mca.Mailbox" + feature + "JNI", classLoader);
+                "com.facebook." + feature.toLowerCase(Locale.ROOT) + ".mca.Mailbox" + feature + "JNI", classLoader);
         for (Method method : cls.getDeclaredMethods()) {
             if (method.getName().startsWith("dispatch")) {
                 XposedBridge.hookMethod(method, new MethodHookLogParams());
@@ -143,6 +144,6 @@ public class OrcaExplorer {
     }
 
     private static String formatColor(@ColorInt int color) {
-        return String.format("#%06X", (0xFFFFFF & color));
+        return String.format(Locale.ROOT, "#%06X", (0xFFFFFF & color));
     }
 }

@@ -3,6 +3,7 @@ package tn.amin.mpro2.hook.all;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -119,16 +120,16 @@ public class TypingIndicatorSentHook extends BaseHook {
 
                     if (!strictMatch && !forceBlock) return;
 
-                        // Enforce blocking only on the known outbound typing signature.
-                        // Combined with targeted boolean mutation, this avoids broad side effects.
-                        boolean allowBlockOnThisPath = forceBlock
+                    // Enforce blocking only on the known outbound typing signature.
+                    // Combined with targeted boolean mutation, this avoids broad side effects.
+                    boolean allowBlockOnThisPath = forceBlock
                             || isKnownOutboundTypingDispatch(tag, method.getName(), param.args);
                     if (!allowBlockOnThisPath) return;
 
-                        if (captureDebug && !forceBlock && shouldLogCapture()) {
+                    if (captureDebug && !forceBlock && shouldLogCapture()) {
                         Logger.info("TypingCapture[" + tag + "]: blocking confirmed method=" + method.getName()
-                            + " action=" + getActionCode(param.args));
-                        }
+                                + " action=" + getActionCode(param.args));
+                    }
 
                     notifyListenersWithResult((listener) -> ((TypingIndicatorSentListener) listener).onTypingIndicatorSent());
                     boolean allowTypingIndicator = !getListenersReturnValue().isConsumed || (Boolean) getListenersReturnValue().value;
@@ -145,7 +146,7 @@ public class TypingIndicatorSentHook extends BaseHook {
                             return;
                         }
                         Object actionCode = (param.args != null && param.args.length > 0) ? param.args[0] : "?";
-                        Logger.info("TypingIndicatorSentHook: blocked " + tag + " typing method=" + method.getName() + " action=" + actionCode);
+                        Logger.verbose("TypingIndicatorSentHook: blocked " + tag + " typing method=" + method.getName() + " action=" + actionCode);
                     }
                 }
             })));
@@ -183,7 +184,7 @@ public class TypingIndicatorSentHook extends BaseHook {
             }
 
             if (arg instanceof String) {
-                String value = ((String) arg).toLowerCase();
+                String value = ((String) arg).toLowerCase(Locale.ROOT);
                 if (value.contains("typing") || value.contains("t_st")) {
                     hasTypingMarker = true;
                 }

@@ -19,6 +19,7 @@ import android.widget.Toast;
 import androidx.annotation.StringRes;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -190,72 +191,8 @@ public class MProPatcher implements
             gateway.setFeatureManager(mFeatureManager);
 
             Logger.verbosePermissionSupplier = mPreferences::isVerboseLoggingEnabled;
-            // Hook the 7Da.A0N (sendImageAttachmentMessage) to discover its signature and params
-            try {
-                Class<?> cls7Da = XposedHelpers.findClass("X.7Da", gateway.classLoader);
-                for (java.lang.reflect.Method m : cls7Da.getDeclaredMethods()) {
-                    if (m.getName().equals("A0N")) {
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                                StringBuilder sb = new StringBuilder("7Da.A0N CALLED! thisObj=" + param.thisObject + " args=(");
-                                for (int i = 0; i < param.args.length; i++) {
-                                    if (i > 0) sb.append(", ");
-                                    Object arg = param.args[i];
-                                    if (arg == null) sb.append("null");
-                                    else sb.append("[" + i + "]" + arg.getClass().getName() + "=" + String.valueOf(arg).substring(0, Math.min(String.valueOf(arg).length(), 100)));
-                                }
-                                sb.append(")");
-                                Logger.info(sb.toString());
-                                // Capture 7Da instance
-                                if (param.thisObject != null && gateway.mailboxConnector != null) {
-                                    gateway.mailboxConnector.set7Da(param.thisObject);
-                                }
-                            }
-                        });
-                        Logger.info("Hooked 7Da.A0N for image send discovery");
-                        break;
-                    }
-                }
-                // Also hook A0T (sendTextMessage) on 7Da to capture instance
-                for (java.lang.reflect.Method m : cls7Da.getDeclaredMethods()) {
-                    if (m.getName().equals("A0T")) {
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                                Logger.info("7Da.A0T (sendText) CALLED! thisObj class=" + (param.thisObject != null ? param.thisObject.getClass().getName() : "null"));
-                                // Capture 7Da instance for sendAttachment
-                                if (param.thisObject != null && gateway.mailboxConnector != null) {
-                                    gateway.mailboxConnector.set7Da(param.thisObject);
-                                }
-                            }
-                        });
-                        Logger.info("Hooked 7Da.A0T for text send discovery");
-                        break;
-                    }
-                }
-                // Hook ALL 7Da instance methods to capture the 7Da reference as early as possible
-                for (java.lang.reflect.Method m : cls7Da.getDeclaredMethods()) {
-                    String mName = m.getName();
-                    // Skip already-hooked methods and static methods
-                    if (mName.equals("A0N") || mName.equals("A0T") || mName.equals("<clinit>")) continue;
-                    if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                    try {
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                                if (param.thisObject != null && gateway.mailboxConnector != null && gateway.mailboxConnector.get7Da() == null) {
-                                    Logger.info("7Da captured from method " + mName + "!");
-                                    gateway.mailboxConnector.set7Da(param.thisObject);
-                                }
-                            }
-                        });
-                    } catch (Throwable ignored) {}
-                }
-                Logger.info("Hooked all 7Da methods for instance capture");
-            } catch (Throwable t2) {
-                Logger.error("Failed to hook 7Da: " + t2.getMessage());
-            }
+            MailboxConnector.discoveryDebugSupplier = mPreferences::isMailboxDiscoveryDebugEnabled;
+            installMailboxDiscoveryHooks(mPreferences.isMailboxDiscoveryDebugEnabled());
         } catch (Throwable t) {
             mPreferences = null;
 
@@ -301,6 +238,112 @@ public class MProPatcher implements
 
         Logger.info("Saving current versions...");
         gateway.state.saveOrcaAndModuleVersion();
+    }
+
+    private void installMailboxDiscoveryHooks(boolean enableExtendedDiscovery) {
+        try {
+            Class<?> cls7Da = XposedHelpers.findClass("X.7Da", gateway.classLoader);
+            int hooksInstalled = 0;
+            hooksInstalled += hook7DaMethod(cls7Da, "A0N", enableExtendedDiscovery);
+            hooksInstalled += hook7DaMethod(cls7Da, "A0T", enableExtendedDiscovery);
+
+            if (enableExtendedDiscovery) {
+                hooksInstalled += hookAll7DaMethodsForDiscovery(cls7Da);
+                Logger.info("Mailbox discovery: hooked " + hooksInstalled + " 7Da methods");
+            } else {
+                Logger.verbose("Mailbox discovery: installed " + hooksInstalled + " minimal 7Da hooks");
+            }
+        } catch (Throwable t) {
+            if (enableExtendedDiscovery) {
+                Logger.error("Failed to hook 7Da discovery: " + t.getMessage());
+            } else {
+                Logger.verbose("Mailbox discovery unavailable: " + t.getMessage());
+            }
+        }
+    }
+
+    private int hook7DaMethod(Class<?> cls7Da, String methodName, boolean enableDetailedLogging) {
+        for (Method method : cls7Da.getDeclaredMethods()) {
+            if (!methodName.equals(method.getName())) {
+                continue;
+            }
+
+            XposedBridge.hookMethod(method, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    capture7DaIfAvailable(param.thisObject, methodName, param.args, enableDetailedLogging);
+                }
+            });
+            return 1;
+        }
+        return 0;
+    }
+
+    private int hookAll7DaMethodsForDiscovery(Class<?> cls7Da) {
+        int hooksInstalled = 0;
+        for (Method method : cls7Da.getDeclaredMethods()) {
+            String methodName = method.getName();
+            if ("A0N".equals(methodName) || "A0T".equals(methodName) || "<clinit>".equals(methodName)) {
+                continue;
+            }
+            if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+                continue;
+            }
+
+            try {
+                XposedBridge.hookMethod(method, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        capture7DaIfAvailable(param.thisObject, methodName, param.args, true);
+                    }
+                });
+                hooksInstalled++;
+            } catch (Throwable ignored) {
+            }
+        }
+        return hooksInstalled;
+    }
+
+    private void capture7DaIfAvailable(Object instance, String source, Object[] args, boolean logInvocation) {
+        if (instance == null || gateway.mailboxConnector == null) {
+            return;
+        }
+
+        gateway.mailboxConnector.set7Da(instance);
+        if (logInvocation) {
+            Logger.info("Mailbox discovery: " + source + " args=" + summarizeMailboxDiscoveryArgs(args));
+        }
+    }
+
+    private String summarizeMailboxDiscoveryArgs(Object[] args) {
+        if (args == null || args.length == 0) {
+            return "[]";
+        }
+
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < args.length; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            Object arg = args[i];
+            if (arg == null) {
+                sb.append(i).append(":null");
+                continue;
+            }
+
+            String value = String.valueOf(arg);
+            if (value.length() > 72) {
+                value = value.substring(0, 72) + "...";
+            }
+            sb.append(i)
+                    .append(":")
+                    .append(arg.getClass().getSimpleName())
+                    .append("=")
+                    .append(value);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     private AlertDialog.Builder buildDialog(@StringRes int title, String message) {

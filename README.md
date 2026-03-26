@@ -19,10 +19,10 @@
 
 1. Gỡ Facebook và Messenger đang cài trên máy để tránh xung đột.
 2. Tải APK Messenger đúng phiên bản sau:
-	https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-553-0-0-60-55-release/facebook-messenger-553-0-0-60-55-6-android-apk-download/?redirected=thank_you_invalid_nonce
+   https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-553-0-0-60-55-release/facebook-messenger-553-0-0-60-55-6-android-apk-download/?redirected=thank_you_invalid_nonce
 3. Tải và cài MRVPatch Manager:
-	https://github.com/NeonOrbit/MRVPatchManager/releases/tag/v2.3.7
-4. Tải file mPro-v1.2.3.apk trong mục Releases của repo này.
+   https://github.com/NeonOrbit/MRVPatchManager/releases/tag/v2.3.7
+4. Tải file `mPro-v1.2.4-debug.apk` trong mục Releases của repo này.
 5. Mở MRVPatch Manager, vào Settings.
 6. Chọn Advanced configurations.
 7. Bật Allow third-party modules.
@@ -41,4 +41,4 @@ Windows PowerShell:
 
 APK output:
 
-- app/build/outputs/apk/debug/mPro-v1.2.3.apk
+- `app/build/outputs/apk/debug/mPro-v1.2.4-debug.apk`

@@ -9,6 +9,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -90,6 +91,13 @@ public class SettingsActivity extends AppCompatActivity {
                 .replace(R.id.settings, new SettingsFragment(sharedPreferences, SettingsType.ROOT))
                 .commit();
 
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                handleBackPressedAction();
+            }
+        });
+
         mToolbar = findViewById(R.id.toolbar);
         setSupportActionBar(mToolbar);
         ActionBar actionBar = getSupportActionBar();
@@ -139,8 +147,7 @@ public class SettingsActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    @Override
-    public void onBackPressed() {
+    private void handleBackPressedAction() {
         if (getSupportFragmentManager().getBackStackEntryCount() > 0) {
             getSupportFragmentManager().popBackStack();
             return;
@@ -153,10 +160,7 @@ public class SettingsActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         switch (item.getItemId()) {
             case android.R.id.home:
-                if (getSupportFragmentManager().getBackStackEntryCount() > 0)
-                    getSupportFragmentManager().popBackStack();
-                else
-                    attemptExit();
+                handleBackPressedAction();
                 break;
         }
         return true;

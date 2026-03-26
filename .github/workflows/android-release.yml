@@ -27,30 +27,51 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
 
-      - name: Resolve APK path
-        id: apk
+      - name: Run lint
+        run: ./gradlew lintDebug
+
+      - name: Build debug and release APKs
+        run: ./gradlew assembleDebug assembleRelease
+
+      - name: Resolve APK paths
+        id: apks
         shell: bash
         run: |
-          APK_PATH="$(find app/build/outputs/apk/debug -maxdepth 1 -name 'mPro-v*.apk' | head -n 1)"
-          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            echo "APK not found in app/build/outputs/apk/debug"
+          DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -maxdepth 1 -name 'mPro-v*-debug.apk' | head -n 1)"
+          RELEASE_APK_PATH="$(find app/build/outputs/apk/release -maxdepth 1 -name 'mPro-v*-release-unsigned.apk' | head -n 1)"
+          if [ -z "$DEBUG_APK_PATH" ] || [ ! -f "$DEBUG_APK_PATH" ]; then
+            echo "Debug APK not found in app/build/outputs/apk/debug"
             exit 1
           fi
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$APK_PATH" .apk)" >> "$GITHUB_OUTPUT"
+          if [ -z "$RELEASE_APK_PATH" ] || [ ! -f "$RELEASE_APK_PATH" ]; then
+            echo "Release APK not found in app/build/outputs/apk/release"
+            exit 1
+          fi
+          echo "debug_path=$DEBUG_APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "debug_name=$(basename "$DEBUG_APK_PATH" .apk)" >> "$GITHUB_OUTPUT"
+          echo "release_path=$RELEASE_APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "release_name=$(basename "$RELEASE_APK_PATH" .apk)" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK artifact
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.apk.outputs.name }}-apk
-          path: ${{ steps.apk.outputs.path }}
+          name: ${{ steps.apks.outputs.debug_name }}-apk
+          path: ${{ steps.apks.outputs.debug_path }}
 
-      - name: Create GitHub Release and upload APK
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apks.outputs.release_name }}-apk
+          path: ${{ steps.apks.outputs.release_path }}
+
+      - name: Create GitHub Release and upload APKs
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.apk.outputs.path }}
+          files: |
+            ${{ steps.apks.outputs.debug_path }}
+            ${{ steps.apks.outputs.release_path }}
           generate_release_notes: true

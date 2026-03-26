@@ -20,6 +20,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import tn.amin.mpro2.R;
 import tn.amin.mpro2.debug.Logger;
@@ -41,11 +42,19 @@ public class DownloadVideoFeature extends Feature
                    MessagesDisplayHook.MessageDisplayHookListener {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private static final long CLIPBOARD_DEDUPE_WINDOW_MS = 1500L;
 
     // Pending FB video URL detected from clipboard
     private static volatile String pendingVideoUrl = null;
+    private final Object clipboardEventLock = new Object();
+    private final Object resolveLock = new Object();
     private boolean clipboardListenerRegistered = false;
     private boolean dialogShowing = false;
+    private ClipboardManager clipboardManager = null;
+    private ClipboardManager.OnPrimaryClipChangedListener clipboardListener = null;
+    private String lastClipboardVideoUrl = null;
+    private long lastClipboardEventAt = 0L;
+    private String activeResolveUrl = null;
 
     // Auto-detected video URLs from displayed messages (all platforms)
     private final List<String> detectedVideoUrls = Collections.synchronizedList(new ArrayList<>());
@@ -152,34 +161,60 @@ public class DownloadVideoFeature extends Feature
      * Called from MProPatcher when activity is available.
      */
     public void registerClipboardListener(Context context) {
-        if (clipboardListenerRegistered) return;
         try {
-            ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            Context appContext = context.getApplicationContext() != null ? context.getApplicationContext() : context;
+            ClipboardManager clipboard = (ClipboardManager) appContext.getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard == null) return;
 
-            clipboard.addPrimaryClipChangedListener(() -> {
-                if (!isEnabled()) return;
-                try {
-                    ClipData clip = clipboard.getPrimaryClip();
-                    if (clip == null || clip.getItemCount() == 0) return;
-                    CharSequence text = clip.getItemAt(0).getText();
-                    if (text == null) return;
+            if (clipboardListenerRegistered && clipboard == clipboardManager && clipboardListener != null) {
+                return;
+            }
 
-                    String videoUrl = VideoDownloadManager.extractUrl(text.toString());
-                    if (videoUrl != null) {
-                        pendingVideoUrl = videoUrl;
-                        VideoDownloadManager.Platform p = VideoDownloadManager.detectPlatform(videoUrl);
-                        Logger.info("VIDEO_DOWNLOAD: clipboard " + p.displayName + " link detected: " + videoUrl);
-                        mainHandler.post(() -> showDownloadDialog(videoUrl));
-                    }
-                } catch (Exception e) {
-                    Logger.verbose("Clipboard listener error: " + e.getMessage());
-                }
-            });
+            if (clipboardManager != null && clipboardListener != null) {
+                clipboardManager.removePrimaryClipChangedListener(clipboardListener);
+            }
+
+            clipboardListener = () -> handleClipboardChanged(clipboard);
+            clipboard.addPrimaryClipChangedListener(clipboardListener);
+            clipboardManager = clipboard;
             clipboardListenerRegistered = true;
-            Logger.info("VIDEO_DOWNLOAD: clipboard listener registered");
+            Logger.verbose("VIDEO_DOWNLOAD: clipboard listener registered");
         } catch (Exception e) {
             Logger.verbose("Could not register clipboard listener: " + e.getMessage());
+        }
+    }
+
+    private void handleClipboardChanged(ClipboardManager clipboard) {
+        if (!isEnabled()) return;
+        try {
+            ClipData clip = clipboard.getPrimaryClip();
+            if (clip == null || clip.getItemCount() == 0) return;
+            CharSequence text = clip.getItemAt(0).getText();
+            if (text == null) return;
+
+            String videoUrl = VideoDownloadManager.extractUrl(text.toString());
+            if (videoUrl == null || shouldIgnoreDuplicateClipboardUrl(videoUrl)) {
+                return;
+            }
+
+            pendingVideoUrl = videoUrl;
+            VideoDownloadManager.Platform p = VideoDownloadManager.detectPlatform(videoUrl);
+            Logger.info("VIDEO_DOWNLOAD: clipboard " + p.displayName + " link detected: " + videoUrl);
+            mainHandler.post(() -> showDownloadDialog(videoUrl));
+        } catch (Exception e) {
+            Logger.verbose("Clipboard listener error: " + e.getMessage());
+        }
+    }
+
+    private boolean shouldIgnoreDuplicateClipboardUrl(String videoUrl) {
+        long now = System.currentTimeMillis();
+        synchronized (clipboardEventLock) {
+            if (videoUrl.equals(lastClipboardVideoUrl) && (now - lastClipboardEventAt) < CLIPBOARD_DEDUPE_WINDOW_MS) {
+                return true;
+            }
+            lastClipboardVideoUrl = videoUrl;
+            lastClipboardEventAt = now;
+            return false;
         }
     }
 
@@ -385,7 +420,7 @@ public class DownloadVideoFeature extends Feature
                 .setTitle(getStringSafe(R.string.feature_download_video, "Download video"))
                 .setMessage("Supported: Facebook, Instagram, TikTok, Douyin")
                 .setView(input)
-                .setPositiveButton("Download now", (dialog, which) -> {
+                .setPositiveButton(getStringSafe(R.string.video_download_download_now, "Download now"), (dialog, which) -> {
                     String raw = input.getText() == null ? "" : input.getText().toString();
                     String url = raw.trim();
                     if (url.isEmpty()) return;
@@ -398,7 +433,7 @@ public class DownloadVideoFeature extends Feature
                     Toast.makeText(context, "Fetching video info...", Toast.LENGTH_SHORT).show();
                     startDownload(context, url);
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getStringSafe(R.string.video_download_cancel, "Cancel"), null)
                 .show();
     }
 
@@ -423,11 +458,11 @@ public class DownloadVideoFeature extends Feature
     }
 
     private String getStringSafe(int resId, String fallback, Object... args) {
-        if (gateway.res == null) return String.format(fallback, args);
+        if (gateway.res == null) return String.format(Locale.ROOT, fallback, args);
         try {
             return gateway.res.getString(resId, args);
         } catch (Throwable ignored) {
-            return String.format(fallback, args);
+            return String.format(Locale.ROOT, fallback, args);
         }
     }
 
@@ -446,14 +481,14 @@ public class DownloadVideoFeature extends Feature
                 .setTitle(title)
                 .setMessage(message)
                 .setCancelable(true)
-                .setPositiveButton("Download", (dialog, which) -> {
+                .setPositiveButton(getStringSafe(R.string.video_download_download_now, "Download now"), (dialog, which) -> {
                     Toast.makeText(context, "Fetching video info...", Toast.LENGTH_SHORT).show();
                     startDownload(context, videoUrl);
                 })
-                .setNegativeButton("Cancel", null);
+                .setNegativeButton(getStringSafe(R.string.video_download_cancel, "Cancel"), null);
 
         if (showOtherUrl) {
-            builder.setNeutralButton("Other URL", (dialog, which) -> {
+            builder.setNeutralButton(getStringSafe(R.string.video_download_other_url, "Other URL"), (dialog, which) -> {
                 if (onOtherUrl != null) {
                     onOtherUrl.run();
                 }
@@ -481,10 +516,10 @@ public class DownloadVideoFeature extends Feature
                     String picked = urls.get(which);
                     showCustomConfirmDialog(context, picked, showOtherUrl, () -> showUrlDialog(context, ""), null);
                 })
-                .setNegativeButton("Cancel", null);
+                .setNegativeButton(getStringSafe(R.string.video_download_cancel, "Cancel"), null);
 
         if (showOtherUrl) {
-            builder.setNeutralButton("Other URL", (dialog, which) -> showUrlDialog(context, ""));
+            builder.setNeutralButton(getStringSafe(R.string.video_download_other_url, "Other URL"), (dialog, which) -> showUrlDialog(context, ""));
         }
 
         AlertDialog dialog = builder.create();
@@ -512,6 +547,11 @@ public class DownloadVideoFeature extends Feature
     }
 
     private void startDownload(Context context, String videoUrl) {
+        if (!beginResolve(videoUrl)) {
+            Toast.makeText(context, getStringSafe(R.string.video_download_already_fetching, "Already fetching this video..."), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         new Thread(() -> {
             try {
                 VideoDownloadManager.VideoResult result = VideoDownloadManager.getVideoInfo(videoUrl);
@@ -543,7 +583,27 @@ public class DownloadVideoFeature extends Feature
                 Logger.error(e);
                 mainHandler.post(() ->
                         Toast.makeText(context, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            } finally {
+                endResolve(videoUrl);
             }
         }, "mpro-video-download").start();
+    }
+
+    private boolean beginResolve(String videoUrl) {
+        synchronized (resolveLock) {
+            if (videoUrl != null && videoUrl.equals(activeResolveUrl)) {
+                return false;
+            }
+            activeResolveUrl = videoUrl;
+            return true;
+        }
+    }
+
+    private void endResolve(String videoUrl) {
+        synchronized (resolveLock) {
+            if (videoUrl == null || videoUrl.equals(activeResolveUrl)) {
+                activeResolveUrl = null;
+            }
+        }
     }
 }

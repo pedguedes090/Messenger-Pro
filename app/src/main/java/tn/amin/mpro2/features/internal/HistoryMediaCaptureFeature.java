@@ -6,6 +6,7 @@ import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -281,7 +282,7 @@ public class HistoryMediaCaptureFeature extends Feature implements MessagesDispl
             return null;
         }
 
-        String lower = trimmed.toLowerCase();
+        String lower = trimmed.toLowerCase(Locale.ROOT);
         if (lower.equals("unknown") || lower.equals("null")) {
             return null;
         }

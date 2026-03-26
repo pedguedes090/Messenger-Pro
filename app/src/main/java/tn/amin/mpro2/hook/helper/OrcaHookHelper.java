@@ -2,6 +2,7 @@ package tn.amin.mpro2.hook.helper;
 
 import java.lang.reflect.Method;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -13,7 +14,7 @@ public class OrcaHookHelper {
     public static Set<XC_MethodHook.Unhook> hookFeature(int featureId, String requiredPrefix, String category, ClassLoader classLoader, XC_MethodHook methodHook) {
         HashSet<XC_MethodHook.Unhook> unhooks = new HashSet<>();
         Class<?> cls = XposedHelpers.findClass(
-                "com.facebook." + category.toLowerCase() + ".mca.Mailbox" + category + "JNI", classLoader);
+                "com.facebook." + category.toLowerCase(Locale.ROOT) + ".mca.Mailbox" + category + "JNI", classLoader);
         Logger.info("hookFeature: featureId=" + featureId + " prefix=dispatch" + requiredPrefix + " class=" + cls.getName());
 
         // Cache method lookups once instead of reflecting per-call
@@ -47,7 +48,7 @@ public class OrcaHookHelper {
     public static Set<XC_MethodHook.Unhook> hookDispatch(String requiredPrefix, String category, ClassLoader classLoader, XC_MethodHook methodHook) {
         HashSet<XC_MethodHook.Unhook> unhooks = new HashSet<>();
         Class<?> cls = XposedHelpers.findClass(
-                "com.facebook." + category.toLowerCase() + ".mca.Mailbox" + category + "JNI", classLoader);
+                "com.facebook." + category.toLowerCase(Locale.ROOT) + ".mca.Mailbox" + category + "JNI", classLoader);
         Logger.info("hookDispatch: prefix=dispatch" + requiredPrefix + " class=" + cls.getName());
 
         Method cachedBefore = resolveHookMethod(methodHook, "beforeHookedMethod");
