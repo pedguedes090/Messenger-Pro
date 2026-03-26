@@ -434,6 +434,20 @@ public class MProPatcher implements
         });
     }
 
+    @Override
+    public void onActivityDestroy(Activity activity) {
+        if (mToolbar != null && mToolbar.attacher != null) {
+            try {
+                mToolbar.attacher.detach();
+            } catch (Throwable t) {
+                Logger.error(t);
+            }
+        }
+        if (mActivity.get() == activity) {
+            mActivity = new WeakReference<>(null);
+        }
+    }
+
     /**
      * Called when Messenger app is resumed
      * @param activity Messenger's MainActivity

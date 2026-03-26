@@ -1,6 +1,7 @@
 package tn.amin.mpro2.features.action;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -9,21 +10,11 @@ import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.ContextThemeWrapper;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.ListView;
-import android.widget.TextView;
+import android.text.InputType;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
-
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.textfield.TextInputEditText;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -43,7 +34,6 @@ import tn.amin.mpro2.hook.all.MessagesDisplayHook;
 import tn.amin.mpro2.orca.OrcaGateway;
 import tn.amin.mpro2.orca.wrapper.MessageWrapper;
 import tn.amin.mpro2.orca.wrapper.MessagesCollectionWrapper;
-import tn.amin.mpro2.ui.ModuleContextWrapper;
 import tn.amin.mpro2.ui.toolbar.ToolbarButtonCategory;
 
 public class DownloadVideoFeature extends Feature
@@ -236,8 +226,7 @@ public class DownloadVideoFeature extends Feature
         pendingVideoUrl = null;
 
         mainHandler.post(() -> {
-            Context ctx = gateway.getActivity();
-            if (ctx == null) ctx = gateway.getContext();
+            Context ctx = getDialogContext();
             if (ctx == null) {
                 dialogShowing = false;
                 return;
@@ -262,8 +251,7 @@ public class DownloadVideoFeature extends Feature
         dialogShowing = true;
 
         mainHandler.post(() -> {
-            Context ctx = gateway.getActivity();
-            if (ctx == null) ctx = gateway.getContext();
+            Context ctx = getDialogContext();
             if (ctx == null) {
                 dialogShowing = false;
                 return;
@@ -383,9 +371,10 @@ public class DownloadVideoFeature extends Feature
     }
 
     private void showUrlDialog(Context context, String prefillUrl) {
-        ContextThemeWrapper dialogContext = createDialogContext(context);
-        View dialogView = LayoutInflater.from(dialogContext).inflate(R.layout.dialog_video_download_input, null, false);
-        TextInputEditText input = dialogView.findViewById(R.id.input_video_url);
+        EditText input = new EditText(context);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        input.setMinLines(3);
+        input.setHint("https://...");
 
         if (prefillUrl != null && !prefillUrl.isEmpty()) {
             input.setText(prefillUrl);
@@ -393,9 +382,9 @@ public class DownloadVideoFeature extends Feature
         }
 
         newDialogBuilder(context)
-                .setTitle("Paste video link")
+                .setTitle(getStringSafe(R.string.feature_download_video, "Download video"))
                 .setMessage("Supported: Facebook, Instagram, TikTok, Douyin")
-                .setView(dialogView)
+                .setView(input)
                 .setPositiveButton("Download now", (dialog, which) -> {
                     String raw = input.getText() == null ? "" : input.getText().toString();
                     String url = raw.trim();
@@ -413,21 +402,33 @@ public class DownloadVideoFeature extends Feature
                 .show();
     }
 
-    private MaterialAlertDialogBuilder newDialogBuilder(Context context) {
-        return new MaterialAlertDialogBuilder(createDialogContext(context))
-                .setIcon(R.drawable.ic_toolbar_download);
+    private AlertDialog.Builder newDialogBuilder(Context context) {
+        return new AlertDialog.Builder(context);
     }
 
-    private ContextThemeWrapper createDialogContext(Context context) {
-        Context baseContext = context;
+    private Context getDialogContext() {
         Activity activity = gateway.getActivity();
-        if (activity != null) {
-            baseContext = activity;
+        if (activity == null) return null;
+        if (activity.isFinishing()) return null;
+        return activity;
+    }
+
+    private String getStringSafe(int resId, String fallback) {
+        if (gateway.res == null) return fallback;
+        try {
+            return gateway.res.getString(resId);
+        } catch (Throwable ignored) {
+            return fallback;
         }
-        if (gateway.res != null) {
-            baseContext = new ModuleContextWrapper(baseContext, gateway.res.unwrap());
+    }
+
+    private String getStringSafe(int resId, String fallback, Object... args) {
+        if (gateway.res == null) return String.format(fallback, args);
+        try {
+            return gateway.res.getString(resId, args);
+        } catch (Throwable ignored) {
+            return String.format(fallback, args);
         }
-        return new ContextThemeWrapper(baseContext, R.style.AppTheme);
     }
 
     private void showCustomConfirmDialog(Context context,
@@ -435,50 +436,35 @@ public class DownloadVideoFeature extends Feature
                                          boolean showOtherUrl,
                                          @Nullable Runnable onOtherUrl,
                                          @Nullable Runnable onDismiss) {
-        ContextThemeWrapper dialogContext = createDialogContext(context);
-        View dialogView = LayoutInflater.from(dialogContext).inflate(R.layout.dialog_video_download_confirm, null, false);
-
         VideoDownloadManager.Platform platform = VideoDownloadManager.detectPlatform(videoUrl);
+        String title = getStringSafe(R.string.video_download_dialog_title, "%s Video", platform.displayName);
+        String message = getStringSafe(R.string.video_download_dialog_subtitle, "Choose what to do with this link")
+                + "\n\n"
+                + formatForDialog(videoUrl);
 
-        TextView titleView = dialogView.findViewById(R.id.dialog_title);
-        TextView subtitleView = dialogView.findViewById(R.id.dialog_subtitle);
-        TextView urlView = dialogView.findViewById(R.id.dialog_url);
-
-        MaterialButton buttonDownload = dialogView.findViewById(R.id.button_download);
-        MaterialButton buttonOther = dialogView.findViewById(R.id.button_other);
-        MaterialButton buttonCancel = dialogView.findViewById(R.id.button_cancel);
-
-        titleView.setText(dialogContext.getString(R.string.video_download_dialog_title, platform.displayName));
-        subtitleView.setText(R.string.video_download_dialog_subtitle);
-        urlView.setText(formatForDialog(videoUrl));
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(dialogContext)
-                .setView(dialogView)
+        AlertDialog.Builder builder = newDialogBuilder(context)
+                .setTitle(title)
+                .setMessage(message)
                 .setCancelable(true)
-                .create();
-
-        if (onDismiss != null) {
-            dialog.setOnDismissListener(d -> onDismiss.run());
-        }
+                .setPositiveButton("Download", (dialog, which) -> {
+                    Toast.makeText(context, "Fetching video info...", Toast.LENGTH_SHORT).show();
+                    startDownload(context, videoUrl);
+                })
+                .setNegativeButton("Cancel", null);
 
         if (showOtherUrl) {
-            buttonOther.setVisibility(View.VISIBLE);
-            buttonOther.setOnClickListener(v -> {
-                dialog.dismiss();
+            builder.setNeutralButton("Other URL", (dialog, which) -> {
                 if (onOtherUrl != null) {
                     onOtherUrl.run();
                 }
             });
-        } else {
-            buttonOther.setVisibility(View.GONE);
         }
 
-        buttonDownload.setOnClickListener(v -> {
-            dialog.dismiss();
-            Toast.makeText(context, "Fetching video info...", Toast.LENGTH_SHORT).show();
-            startDownload(context, videoUrl);
-        });
-        buttonCancel.setOnClickListener(v -> dialog.dismiss());
+        AlertDialog dialog = builder.create();
+
+        if (onDismiss != null) {
+            dialog.setOnDismissListener(d -> onDismiss.run());
+        }
 
         dialog.show();
     }
@@ -487,90 +473,26 @@ public class DownloadVideoFeature extends Feature
                                            List<String> urls,
                                            boolean showOtherUrl,
                                            @Nullable Runnable onDismiss) {
-        ContextThemeWrapper dialogContext = createDialogContext(context);
-        View dialogView = LayoutInflater.from(dialogContext).inflate(R.layout.dialog_video_download_list, null, false);
-
-        TextView titleView = dialogView.findViewById(R.id.dialog_list_title);
-        TextView subtitleView = dialogView.findViewById(R.id.dialog_list_subtitle);
-        ListView listView = dialogView.findViewById(R.id.dialog_list_urls);
-        MaterialButton buttonOther = dialogView.findViewById(R.id.button_list_other);
-        MaterialButton buttonCancel = dialogView.findViewById(R.id.button_list_cancel);
-
-        titleView.setText(R.string.video_download_list_title);
-        subtitleView.setText(R.string.video_download_list_subtitle);
-
-        listView.setAdapter(new UrlListAdapter(dialogContext, urls));
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(dialogContext)
-                .setView(dialogView)
+        AlertDialog.Builder builder = newDialogBuilder(context)
+                .setTitle(getStringSafe(R.string.video_download_list_title, "Detected video links"))
+                .setMessage(getStringSafe(R.string.video_download_list_subtitle, "Choose a link"))
                 .setCancelable(true)
-                .create();
+                .setItems(buildDialogItems(urls), (dialog, which) -> {
+                    String picked = urls.get(which);
+                    showCustomConfirmDialog(context, picked, showOtherUrl, () -> showUrlDialog(context, ""), null);
+                })
+                .setNegativeButton("Cancel", null);
+
+        if (showOtherUrl) {
+            builder.setNeutralButton("Other URL", (dialog, which) -> showUrlDialog(context, ""));
+        }
+
+        AlertDialog dialog = builder.create();
 
         if (onDismiss != null) {
             dialog.setOnDismissListener(d -> onDismiss.run());
         }
-
-        listView.setOnItemClickListener((parent, view, position, id) -> {
-            dialog.dismiss();
-            String picked = urls.get(position);
-            showCustomConfirmDialog(context, picked, showOtherUrl, () -> showUrlDialog(context, ""), null);
-        });
-
-        if (showOtherUrl) {
-            buttonOther.setVisibility(View.VISIBLE);
-            buttonOther.setOnClickListener(v -> {
-                dialog.dismiss();
-                showUrlDialog(context, "");
-            });
-        } else {
-            buttonOther.setVisibility(View.GONE);
-        }
-
-        buttonCancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
-    }
-
-    private static class UrlListAdapter extends BaseAdapter {
-        private final Context context;
-        private final List<String> urls;
-
-        UrlListAdapter(Context context, List<String> urls) {
-            this.context = context;
-            this.urls = urls;
-        }
-
-        @Override
-        public int getCount() {
-            return urls.size();
-        }
-
-        @Override
-        public Object getItem(int position) {
-            return urls.get(position);
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            View view = convertView;
-            if (view == null) {
-                view = LayoutInflater.from(context).inflate(R.layout.dialog_video_download_list_item, parent, false);
-            }
-
-            String url = urls.get(position);
-            VideoDownloadManager.Platform platform = VideoDownloadManager.detectPlatform(url);
-
-            TextView platformView = view.findViewById(R.id.item_platform);
-            TextView urlView = view.findViewById(R.id.item_url);
-
-            platformView.setText(platform.displayName);
-            urlView.setText(url);
-            return view;
-        }
     }
 
     private String[] buildDialogItems(List<String> urls) {

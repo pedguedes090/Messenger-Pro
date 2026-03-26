@@ -34,17 +34,18 @@ jobs:
         id: apk
         shell: bash
         run: |
-          APK_PATH="app/build/outputs/apk/debug/mPro-v1.2.0.apk"
-          if [ ! -f "$APK_PATH" ]; then
-            echo "APK not found at $APK_PATH"
+          APK_PATH="$(find app/build/outputs/apk/debug -maxdepth 1 -name 'mPro-v*.apk' | head -n 1)"
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "APK not found in app/build/outputs/apk/debug"
             exit 1
           fi
           echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$APK_PATH" .apk)" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mPro-v1.2.0-apk
+          name: ${{ steps.apk.outputs.name }}-apk
           path: ${{ steps.apk.outputs.path }}
 
       - name: Create GitHub Release and upload APK

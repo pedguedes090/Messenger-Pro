@@ -30,6 +30,7 @@ public class ActivityHook {
     public interface ActivityEventListener {
         void onActivityCreate(Activity activity);
         void onActivityResume(Activity activity);
+        void onActivityDestroy(Activity activity);
         void onCreateContextMenu(Activity activity, ContextMenu menu, View view, ContextMenu.ContextMenuInfo menuInfo);
 
         boolean onDispatchTouchEvent(MotionEvent event);
@@ -41,6 +42,7 @@ public class ActivityHook {
         Class<?> TargetActivity = XposedHelpers.findClass(activityName, classLoader);
         Method onCreate = XposedHelpers.findMethodBestMatch(TargetActivity, "onCreate", Bundle.class);
         Method onResume = XposedHelpers.findMethodBestMatch(TargetActivity, "onResume");
+        Method onDestroy = XposedHelpers.findMethodBestMatch(TargetActivity, "onDestroy");
         Method onCreateContextMenu = XposedHelpers.findMethodBestMatch(TargetActivity, "onCreateContextMenu",
                 ContextMenu.class, View.class, ContextMenu.ContextMenuInfo.class);
         Method onActivityResult = XposedHelpers.findMethodBestMatch(TargetActivity, "onActivityResult",
@@ -74,6 +76,16 @@ public class ActivityHook {
                     currentActivity = new WeakReference<>(activity);
 
                     listener.onActivityResume(activity);
+                }
+            }
+        });
+
+        XposedBridge.hookMethod(onDestroy, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                if (TargetActivity.isInstance(param.thisObject)) {
+                    Activity activity = (Activity) param.thisObject;
+                    listener.onActivityDestroy(activity);
                 }
             }
         });
