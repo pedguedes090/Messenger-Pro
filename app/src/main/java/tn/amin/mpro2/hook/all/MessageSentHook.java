@@ -10,7 +10,6 @@ import tn.amin.mpro2.debug.Logger;
 import tn.amin.mpro2.hook.BaseHook;
 import tn.amin.mpro2.hook.HookId;
 import tn.amin.mpro2.hook.listener.HookListenerResult;
-import tn.amin.mpro2.messaging.history.MessageHistoryStore;
 import tn.amin.mpro2.orca.OrcaGateway;
 import tn.amin.mpro2.orca.datatype.Mention;
 import tn.amin.mpro2.orca.datatype.TextMessage;
@@ -61,8 +60,6 @@ public class MessageSentHook extends BaseHook {
                     }
 
                     TextMessage refinedMessage = (TextMessage) getListenersReturnValue().value;
-                    TextMessage finalMessage = refinedMessage != null ? refinedMessage : originalMessage;
-                    persistOutgoingIfEnabled(gateway, finalMessage, threadKey);
 
                     if (refinedMessage == null) return;
 
@@ -99,8 +96,6 @@ public class MessageSentHook extends BaseHook {
                     }
 
                     TextMessage refinedMessage = (TextMessage) getListenersReturnValue().value;
-                    TextMessage finalMessage = refinedMessage != null ? refinedMessage : originalMessage;
-                    persistOutgoingIfEnabled(gateway, finalMessage, threadKey);
 
                     if (refinedMessage == null) return;
 
@@ -113,18 +108,6 @@ public class MessageSentHook extends BaseHook {
                 }
             }
         }));
-    }
-
-    private void persistOutgoingIfEnabled(OrcaGateway gateway, TextMessage message, Long threadKey) {
-        if (gateway.pref == null || !gateway.pref.isMessageHistoryEnabled()) {
-            return;
-        }
-
-        if (threadKey == null || threadKey <= 0 || message == null) {
-            return;
-        }
-
-        MessageHistoryStore.appendOutgoing(message.content, null, threadKey);
     }
 
     public interface MessageSentListener {

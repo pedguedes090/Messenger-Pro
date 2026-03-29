@@ -81,9 +81,4 @@
         android:key="mpro_other_allow_logs"
         android:title="@string/pref_allow_logs"
         android:summary="@string/pref_allow_logs_summary" />
-    <SwitchPreference
-        android:defaultValue="false"
-        android:key="mpro_other_message_history"
-        android:title="@string/pref_message_history"
-        android:summary="@string/pref_message_history_summary" />
 </PreferenceScreen>

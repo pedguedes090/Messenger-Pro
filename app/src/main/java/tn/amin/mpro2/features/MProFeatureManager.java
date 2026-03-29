@@ -6,14 +6,12 @@ import tn.amin.mpro2.features.action.ConversationLockFeature;
 import tn.amin.mpro2.features.action.CopyThreadKeyFeature;
 import tn.amin.mpro2.features.action.SettingsFeature;
 import tn.amin.mpro2.features.internal.ThreadKeyDetectorFeature;
-import tn.amin.mpro2.features.internal.HistoryMediaCaptureFeature;
 import tn.amin.mpro2.features.state.CommandsFeature;
 import tn.amin.mpro2.features.state.DefaultCameraFeature;
 import tn.amin.mpro2.features.state.FormattingFeature;
 import tn.amin.mpro2.features.state.MediaTranscodeFeature;
 import tn.amin.mpro2.features.state.UnseenFeature;
 import tn.amin.mpro2.features.state.UntypingFeature;
-import tn.amin.mpro2.features.tasker.TaskerEventMessageFeature;
 import tn.amin.mpro2.features.tasker.TaskerEventTypingIndicatorFeature;
 import tn.amin.mpro2.hook.HookManager;
 import tn.amin.mpro2.orca.OrcaGateway;
@@ -26,7 +24,6 @@ public class MProFeatureManager extends FeatureManager {
     public void initFeatures(OrcaGateway gateway) {
         // Internal features
         addFeature(new ThreadKeyDetectorFeature(gateway));
-        addFeature(new HistoryMediaCaptureFeature(gateway));
 
         // Action features
         addFeature(new AttachFileFeature(gateway));
@@ -44,7 +41,6 @@ public class MProFeatureManager extends FeatureManager {
         addFeature(new MediaTranscodeFeature(gateway));
 
         // Tasker features
-        addFeature(new TaskerEventMessageFeature(gateway));
         addFeature(new TaskerEventTypingIndicatorFeature(gateway));
     }
 }

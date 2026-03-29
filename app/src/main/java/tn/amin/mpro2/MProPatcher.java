@@ -41,7 +41,6 @@ import tn.amin.mpro2.hook.ApplicationHook;
 import tn.amin.mpro2.hook.BroadcastReceiverHook;
 import tn.amin.mpro2.hook.HookTime;
 import tn.amin.mpro2.hook.MProHookManager;
-import tn.amin.mpro2.messaging.history.MessageHistoryStore;
 import tn.amin.mpro2.orca.OrcaBridge;
 import tn.amin.mpro2.orca.OrcaGateway;
 import tn.amin.mpro2.orca.connector.MailboxConnector;
@@ -495,25 +494,9 @@ public class MProPatcher implements
      * Called when Messenger app is resumed
      * @param activity Messenger's MainActivity
      */
-    private boolean mFirstResume = true;
-
     @Override
     public void onActivityResume(Activity activity) {
         doOnSetupFinished(() -> {
-            if (gateway.requireThreadKey(false) && gateway.currentThreadKey != null) {
-                CharSequence title = activity.getTitle();
-                if (title != null) {
-                    MessageHistoryStore.updateThreadName(gateway.currentThreadKey, title.toString());
-                }
-            }
-
-            if (mFirstResume) {
-                mFirstResume = false;
-                // Trigger pull-to-refresh immediately on first launch
-                View rootView = activity.getWindow().getDecorView();
-                rootView.post(() -> findAndTriggerRefresh(rootView));
-            }
-
             long timeElapsed = gateway.state.getTimeElapsed("lastOpenP");
 
             // If 2 days have elapsed, show patreon popup
@@ -592,9 +575,24 @@ public class MProPatcher implements
 
     @Override
     public boolean onDispatchTouchEvent(MotionEvent event) {
+        if (event == null) {
+            return false;
+        }
+
         mSettingsLongPressDetector.handleTouchEvent(event);
         mMessageLongPressDetector.handleTouchEvent(event);
-        return mToolbar.handleTouchEvent(event);
+
+        if (mToolbar == null) {
+            return false;
+        }
+
+        try {
+            return mToolbar.handleTouchEvent(event);
+        } catch (Throwable t) {
+            Logger.error("MProPatcher: toolbar touch handler failed: " + t.getMessage());
+            Logger.error(t);
+            return false;
+        }
     }
 
     /**

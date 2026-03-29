@@ -18,11 +18,6 @@
         android:key="mpro_advanced_hookstate"
         android:summary="@string/pref_hookstate_summary" />
 
-    <Preference
-        android:title="@string/pref_chat_history"
-        android:key="mpro_advanced_chat_history"
-        android:summary="@string/pref_chat_history_summary" />
-
     <PreferenceCategory
         android:title="@string/settings_category_debug" />
 

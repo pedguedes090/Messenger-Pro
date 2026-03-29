@@ -13,7 +13,6 @@ import tn.amin.mpro2.features.FeatureId;
 import tn.amin.mpro2.features.FeatureType;
 import tn.amin.mpro2.file.StorageConstants;
 import tn.amin.mpro2.hook.HookId;
-import tn.amin.mpro2.messaging.history.MessageHistoryStore;
 import tn.amin.mpro2.orca.OrcaGateway;
 import tn.amin.mpro2.ui.toolbar.ToolbarButtonCategory;
 
@@ -63,20 +62,11 @@ public class SettingsFeature extends Feature {
 
     @Override
     public void executeAction() {
-        if (gateway.currentThreadKey != null && gateway.currentThreadKey > 0
-                && gateway.getActivity() != null && gateway.getActivity().getTitle() != null) {
-            MessageHistoryStore.updateThreadName(gateway.currentThreadKey, gateway.getActivity().getTitle().toString());
-        }
-
         Intent intent = new Intent();
         intent.setComponent(new ComponentName("tn.amin.mpro2", "tn.amin.mpro2.settings.SettingsActivity"));
         intent.putExtra(StorageConstants.prefName, (Serializable) gateway.pref.sp.getAll());
         intent.putExtra(StorageConstants.unobfPrefName, (Serializable) gateway.unobfuscator.getPreferences().getAll());
         intent.putExtra(StorageConstants.statePrefName, (Serializable) gateway.state.sp.getAll());
-        intent.putStringArrayListExtra(StorageConstants.historyLinesExtra,
-            MessageHistoryStore.exportHistoryLinesForSettings(3000));
-        intent.putExtra(StorageConstants.historyThreadNamesExtra,
-            MessageHistoryStore.exportThreadNamesForSettings());
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
         gateway.getContext().startActivity(intent);

@@ -13,13 +13,13 @@ import tn.amin.mpro2.hook.BaseHook;
 import tn.amin.mpro2.hook.HookId;
 import tn.amin.mpro2.hook.HookTime;
 import tn.amin.mpro2.hook.listener.HookListenerResult;
+import tn.amin.mpro2.hook.unobfuscation.OrcaUnobfuscator;
 import tn.amin.mpro2.orca.OrcaGateway;
 
 public class SeenIndicatorHook extends BaseHook {
     private static final int ACTION_TYPING_SUBSCRIPTION = 81;
     private static final int ACTION_SEEN_DISPATCH_V553 = 62;
     private static final int ACTION_MARK_READ_DISPATCH_V553 = 23;
-    private static final int ACTION_SEEN_NATIVE_DISPATCH_V553 = 9;
     private static final String MAILBOX_ORCA_JNI = "com.facebook.orca.mca.MailboxOrcaJNI";
     private static final int DEBUG_MISS_LOG_LIMIT = 200;
 
@@ -38,6 +38,8 @@ public class SeenIndicatorHook extends BaseHook {
     @Override
     protected Set<XC_MethodHook.Unhook> injectInternal(OrcaGateway gateway) {
         final boolean captureDebug = gateway.pref != null && gateway.pref.isTypingCaptureDebugEnabled();
+        final int configuredSeenApiCode = gateway.unobfuscator.getAPICode(OrcaUnobfuscator.API_MESSAGE_SEEN);
+        Logger.info("SeenIndicatorHook: configured legacy seen apiCode=" + configuredSeenApiCode);
         var wrapped = wrap(new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -55,7 +57,9 @@ public class SeenIndicatorHook extends BaseHook {
                 // Legacy seen-indicator pattern: Mailbox in args[1] or args[2], args[3] is Long.
                 // Null in args[3] matches non-seen dispatches (including typing-related calls).
                 if (param.args.length < 4) return;
-                boolean matchesLegacySeen = (
+                boolean matchesLegacySeen = configuredSeenApiCode > 0
+                        && actionCode == configuredSeenApiCode
+                        && (
                     (param.args[1] != null && param.args[1].getClass().getName().equals(OrcaClassNames.MAILBOX)) ||
                     (param.args.length > 2 && param.args[2] != null && param.args[2].getClass().getName().equals(OrcaClassNames.MAILBOX))
                 ) && (param.args[3] != null && param.args[3].getClass().getName().equals(Long.class.getName()));
@@ -77,12 +81,13 @@ public class SeenIndicatorHook extends BaseHook {
                     // User-requested hard block for 81 path.
                     // Common shape: dispatchVOOOO(Integer=81, Mailbox, threadToken, null, NotificationScope)
                     boolean matchesV553SubscriptionSeen = actionCode == ACTION_TYPING_SUBSCRIPTION
-                            && methodName.startsWith("dispatchV")
+                            && "dispatchVOOOO".equals(methodName)
                             && param.args.length >= 5
                             && param.args[1] != null
                             && OrcaClassNames.MAILBOX.equals(param.args[1].getClass().getName())
                             && param.args[2] instanceof String
                             && ((String) param.args[2]).startsWith("T_")
+                            && param.args[3] == null
                             && param.args[4] != null
                             && param.args[4].getClass().getName().contains("NotificationScope");
 
@@ -96,27 +101,18 @@ public class SeenIndicatorHook extends BaseHook {
                         && param.args[1] != null
                         && param.args[1].getClass().getName().equals(OrcaClassNames.MAILBOX);
 
-                    // Observed in runtime diagnostics during seen leakage:
-                    // dispatchVIOO(Integer=9, Integer=0, Mailbox, NativeHolder)
-                    boolean matchesV553NativeSeen = actionCode == ACTION_SEEN_NATIVE_DISPATCH_V553
-                            && methodName.startsWith("dispatchV")
-                            && param.args.length >= 4
-                            && param.args[2] != null
-                            && OrcaClassNames.MAILBOX.equals(param.args[2].getClass().getName())
-                            && param.args[3] != null
-                            && param.args[3].getClass().getName().contains("NativeHolder");
-
                         boolean matchesSeen = matchesLegacySeen
                             || matchesV553Seen
                             || matchesV553SubscriptionSeen
-                            || matchesV553MarkRead
-                            || matchesV553NativeSeen;
+                            || matchesV553MarkRead;
 
                 if (matchesSeen) {
                     notifyListenersWithResult((listener) -> ((SeenIndicatorListener) listener).onSeenIndicator());
                     boolean allowSeen = !getListenersReturnValue().isConsumed || (Boolean) getListenersReturnValue().value;
                     if (!allowSeen) {
-                        Logger.verbose("SeenIndicatorHook: blocked seen dispatch method=" + methodName + " action=" + actionCode);
+                        Logger.verbose("SeenIndicatorHook: blocked seen dispatch method=" + methodName
+                                + " action=" + actionCode
+                                + " args=" + summarizeArgs(param.args));
                         Method hookedMethod = (Method) param.method;
                         param.setResult(getDefaultReturnValue(hookedMethod.getReturnType()));
                     }

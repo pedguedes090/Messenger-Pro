@@ -26,10 +26,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
-import java.text.SimpleDateFormat;
 
 import de.robv.android.xposed.XposedBridge;
 import tn.amin.mpro2.R;
@@ -47,10 +44,6 @@ import tn.amin.mpro2.features.util.message.command.provider.AIProviderInteracter
 import tn.amin.mpro2.file.FileHelper;
 import tn.amin.mpro2.file.StorageConstants;
 import tn.amin.mpro2.messaging.MessageSender;
-import tn.amin.mpro2.messaging.OrcaMessageSender;
-import tn.amin.mpro2.messaging.history.HistoryThreadInfo;
-import tn.amin.mpro2.messaging.history.MessageHistoryEntry;
-import tn.amin.mpro2.messaging.history.MessageHistoryStore;
 import tn.amin.mpro2.orca.OrcaGateway;
 import tn.amin.mpro2.orca.OrcaStickers;
 import tn.amin.mpro2.orca.builder.AttachmentBuilder;
@@ -100,10 +93,6 @@ public class CommandsManager {
                 .then(argument("prompt", greedyString()).executes(c -> comAPI("ai", c))));
         mDispatcher.register(literal("latex")
                 .then(argument("expression", greedyString()).executes(c -> comAPI("latex", c))));
-        mDispatcher.register(literal("history").executes(c -> comHistory(20, c))
-            .then(argument("limit", integer(1, 50)).executes(c -> comHistory(getInteger(c, "limit"), c))));
-        mDispatcher.register(literal("threads").executes(c -> comThreads(20, c))
-            .then(argument("limit", integer(1, 50)).executes(c -> comThreads(getInteger(c, "limit"), c))));
     }
 
     private void update(String message, CommandBundle source) {
@@ -288,153 +277,6 @@ public class CommandsManager {
         }).start();
         return 1;
     }
-
-    private int comHistory(int limit, CommandContext c) {
-        CommandBundle bundle = (CommandBundle) c.getSource();
-        MessageSender messageSender = bundle.messageSender;
-
-        Long threadKey = null;
-        if (messageSender instanceof OrcaMessageSender) {
-            threadKey = ((OrcaMessageSender) messageSender).getThreadKey();
-        }
-
-        if (threadKey == null && gateway.requireThreadKey(false)) {
-            threadKey = gateway.currentThreadKey;
-        }
-
-        if (threadKey == null || threadKey <= 0) {
-            messageSender.sendMessage(gateway.res.getString(R.string.threadkey_required));
-            return 1;
-        }
-
-        rememberCurrentThreadName(threadKey);
-
-        List<MessageHistoryEntry> entries = MessageHistoryStore.getRecentMessages(threadKey, limit);
-        if (entries.isEmpty()) {
-            messageSender.sendMessage("No chat history found for this conversation yet.");
-            return 1;
-        }
-
-        String message = formatHistory(entries, limit, threadKey);
-        messageSender.sendMessage(message);
-        return 1;
-    }
-
-    private int comThreads(int limit, CommandContext c) {
-        MessageSender messageSender = ((CommandBundle) c.getSource()).messageSender;
-
-        if (gateway.requireThreadKey(false) && gateway.currentThreadKey != null) {
-            rememberCurrentThreadName(gateway.currentThreadKey);
-        }
-
-        List<HistoryThreadInfo> threads = MessageHistoryStore.getRecentThreads(limit);
-        if (threads.isEmpty()) {
-            messageSender.sendMessage("No threads found in chat history yet.");
-            return 1;
-        }
-
-        StringBuilder builder = new StringBuilder("Threads in history:");
-        for (int i = 0; i < threads.size(); i++) {
-            HistoryThreadInfo thread = threads.get(i);
-            builder.append('\n')
-                    .append(i + 1)
-                    .append(". ")
-                    .append(resolveThreadDisplayName(thread.threadName, thread.threadKey))
-                    .append(" (")
-                    .append(thread.messageCount)
-                    .append(" msgs)");
-        }
-
-        messageSender.sendMessage(builder.toString());
-        return 1;
-    }
-
-    private String formatHistory(List<MessageHistoryEntry> entries, int limit, long threadKey) {
-        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
-        StringBuilder builder = new StringBuilder();
-        String threadName = resolveThreadDisplayName(MessageHistoryStore.getThreadName(threadKey), threadKey);
-        builder.append("Chat history - ")
-                .append(threadName)
-                .append(" (last ")
-                .append(Math.min(limit, entries.size()))
-                .append(")");
-
-        for (MessageHistoryEntry entry : entries) {
-            String sender = entry.isIncoming() ? simplifySender(entry.senderUserKey) : "You";
-            String content = sanitizeHistoryText(entry.content);
-
-            builder.append('\n')
-                    .append('[').append(timeFormat.format(new Date(entry.timestamp))).append("] ")
-                    .append(sender)
-                    .append(": ")
-                    .append(content);
-
-            if (builder.length() > 3400) {
-                builder.append("\n...");
-                break;
-            }
-        }
-
-        return builder.toString();
-    }
-
-    private void rememberCurrentThreadName(long threadKey) {
-        if (threadKey <= 0) {
-            return;
-        }
-
-        if (gateway.getActivity() == null) {
-            return;
-        }
-
-        CharSequence title = gateway.getActivity().getTitle();
-        if (title == null) {
-            return;
-        }
-
-        MessageHistoryStore.updateThreadName(threadKey, title.toString());
-    }
-
-    private String resolveThreadDisplayName(String storedName, long threadKey) {
-        if (storedName != null && !storedName.trim().isEmpty()) {
-            return storedName;
-        }
-
-        if (gateway.currentThreadKey != null && gateway.currentThreadKey == threadKey
-                && gateway.getActivity() != null && gateway.getActivity().getTitle() != null) {
-            String liveName = gateway.getActivity().getTitle().toString().trim();
-            if (!liveName.isEmpty()) {
-                MessageHistoryStore.updateThreadName(threadKey, liveName);
-                return liveName;
-            }
-        }
-
-        return "Unknown thread";
-    }
-
-    private String sanitizeHistoryText(String text) {
-        if (text == null || text.isEmpty()) {
-            return "(empty)";
-        }
-
-        String oneLine = text.replace('\n', ' ').replace('\r', ' ').trim();
-        if (oneLine.length() <= 120) {
-            return oneLine;
-        }
-        return oneLine.substring(0, 117) + "...";
-    }
-
-    private String simplifySender(String senderUserKey) {
-        if (senderUserKey == null || senderUserKey.isEmpty()) {
-            return "Unknown";
-        }
-
-        if (senderUserKey.startsWith("fbid:")) {
-            return senderUserKey.substring(5);
-        }
-        return senderUserKey;
-    }
-
 
     private static String getStringOrNull(CommandContext c, String key) {
         String s;

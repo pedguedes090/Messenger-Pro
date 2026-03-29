@@ -58,7 +58,7 @@ public class ModulePreferences {
     }
 
     public boolean isMessageHistoryEnabled() {
-        return sp.getBoolean("mpro_other_message_history", false);
+        return false;
     }
 
     public boolean isTypingCaptureDebugEnabled() {

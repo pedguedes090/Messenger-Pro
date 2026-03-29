@@ -29,7 +29,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -38,10 +37,8 @@ import tn.amin.mpro2.R;
 import tn.amin.mpro2.debug.Logger;
 import tn.amin.mpro2.features.util.biometric.ConversationLock;
 import tn.amin.mpro2.file.StorageConstants;
-import tn.amin.mpro2.messaging.history.MessageHistoryStore;
 import tn.amin.mpro2.orca.OrcaBridge;
 import tn.amin.mpro2.preference.MapSharedPreferences;
-import tn.amin.mpro2.settings.history.HistoryDialogs;
 import tn.amin.mpro2.settings.hookstate.HookStateFragment;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -62,8 +59,6 @@ public class SettingsActivity extends AppCompatActivity {
             finish();
             return;
         }
-
-        applyHistorySnapshotFromIntent(getIntent());
 
         @SuppressWarnings("unchecked")
         Map<String, Object> normalPrefMap = (Map<String, Object>) getIntent().getSerializableExtra(StorageConstants.prefName);
@@ -115,35 +110,12 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        if (intent == null) {
-            return;
-        }
-
-        setIntent(intent);
-        applyHistorySnapshotFromIntent(intent);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void applyHistorySnapshotFromIntent(Intent intent) {
-        ArrayList<String> historyLines = intent.getStringArrayListExtra(StorageConstants.historyLinesExtra);
-        Map<String, String> historyThreadNames = null;
-        Object historyThreadNamesObj = intent.getSerializableExtra(StorageConstants.historyThreadNamesExtra);
-        if (historyThreadNamesObj instanceof Map) {
-            historyThreadNames = (Map<String, String>) historyThreadNamesObj;
-        }
-        MessageHistoryStore.setInMemorySnapshot(historyLines, historyThreadNames);
-    }
-
-    @Override
     protected void onDestroy() {
         if (mSharedPreferences != null) {
             for (SharedPreferences pref : mSharedPreferences.values()) {
                 pref.unregisterOnSharedPreferenceChangeListener(mChangeListener);
             }
         }
-        MessageHistoryStore.clearInMemorySnapshot();
         super.onDestroy();
     }
 
@@ -388,12 +360,6 @@ public class SettingsActivity extends AppCompatActivity {
             linkPreferenceToFragment("mpro_advanced_unobfuscator", SettingsType.UNOBFUSCATOR, "fragUnobfuscator");
             linkPreferenceToFragment("mpro_advanced_apicodes", SettingsType.API_CODES, "fragApiCodes");
             linkPreferenceToFragment("mpro_advanced_hookstate", new HookStateFragment(mSharedPreferences.get(StorageConstants.statePrefName)), "fragHookState", SettingsType.HOOK_STATE);
-
-            Preference chatHistory = Objects.requireNonNull(findPreference("mpro_advanced_chat_history"));
-            chatHistory.setOnPreferenceClickListener(preference -> {
-                HistoryDialogs.showThreadsDialog(requireContext());
-                return true;
-            });
         }
 
         private void displayToolbarSettings() {

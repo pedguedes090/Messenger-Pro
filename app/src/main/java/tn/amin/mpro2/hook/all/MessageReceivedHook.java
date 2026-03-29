@@ -3,13 +3,16 @@ package tn.amin.mpro2.hook.all;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import de.robv.android.xposed.XC_MethodHook;
 import tn.amin.mpro2.debug.Logger;
@@ -22,12 +25,17 @@ import tn.amin.mpro2.messaging.history.MessageHistoryStore;
 import tn.amin.mpro2.orca.OrcaGateway;
 
 public class MessageReceivedHook extends BaseHook {
+    private static final String[] DISPATCH_CATEGORIES = new String[] {"Orca", "SDK", "Core"};
     private static final Pattern USER_KEY_PATTERN = Pattern.compile("^(fbid:)?\\d{4,}$");
     private static final int MAX_RECENT_KEYS = 80;
+    private static final int MIN_API_LEARN_HITS = 2;
+    private static final int MAX_PROBE_LOGS = 120;
 
     private final ArrayDeque<String> mRecentEventKeys = new ArrayDeque<>();
     private final Set<String> mRecentEventSet = new HashSet<>();
+    private final Map<Integer, Integer> mActionLearnHits = new HashMap<>();
     private volatile int mRuntimeApiCode = -1;
+    private int mProbeLogCount = 0;
 
     @Override
     public HookId getId() {
@@ -45,54 +53,97 @@ public class MessageReceivedHook extends BaseHook {
         Logger.info("MessageReceivedHook: configured apiCode=" + mRuntimeApiCode);
 
         Set<XC_MethodHook.Unhook> hooks = new HashSet<>();
-        hooks.addAll(OrcaHookHelper.hookFeature(mRuntimeApiCode,
-                "V", "Orca", gateway.classLoader, wrap(new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        MessagePayload payload = extractPayload(param.args, true);
-                        if (!payload.isComplete()) {
-                            Logger.verbose("MessageReceivedHook: dispatch matched api but payload incomplete");
-                            return;
-                        }
+        XC_MethodHook configuredHook = wrap(new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                MessagePayload payload = extractPayload(param.args, true);
+                if (!looksLikeIncomingPayload(payload)) {
+                    maybeLogProbe(gateway, mRuntimeApiCode, param, payload, "configured-miss");
+                    return;
+                }
 
-                        dispatchMessage(gateway, payload, "configured");
-                    }
-                })));
+                if (!isLikelyChatPayload(payload)) {
+                    maybeLogProbe(gateway, mRuntimeApiCode, param, payload, "configured-skip");
+                    return;
+                }
 
-        hooks.addAll(OrcaHookHelper.hookDispatch(
-                "V", "Orca", gateway.classLoader, wrapIgnoreWorking(new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        if (param.args == null || param.args.length == 0 || !(param.args[0] instanceof Integer)) {
-                            return;
-                        }
+                dispatchMessage(gateway, payload, "configured");
+            }
+        });
 
-                        int actionCode = (Integer) param.args[0];
-                        if (actionCode == mRuntimeApiCode) {
-                            return;
-                        }
+        XC_MethodHook discoveryHook = wrapIgnoreWorking(new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                if (param.args == null || param.args.length == 0 || !(param.args[0] instanceof Integer)) {
+                    return;
+                }
 
-                        MessagePayload payload = extractPayload(param.args, true);
-                        if (!payload.isComplete() || !looksLikeIncomingPayload(payload)) {
-                            return;
-                        }
+                int actionCode = (Integer) param.args[0];
+                if (actionCode == mRuntimeApiCode) {
+                    return;
+                }
 
-                        String normalizedMessage = normalizeIncomingMessage(payload.message);
-                        if (normalizedMessage == null) {
-                            return;
-                        }
-                        payload = new MessagePayload(normalizedMessage, payload.messageId, payload.senderUserKey, payload.convThreadKey);
+                MessagePayload payload = extractPayload(param.args, true);
+                if (!looksLikeIncomingPayload(payload)) {
+                    maybeLogProbe(gateway, actionCode, param, payload, "learn-miss");
+                    return;
+                }
 
+                String normalizedMessage = normalizeIncomingMessage(payload.message);
+                if (normalizedMessage == null) {
+                    maybeLogProbe(gateway, actionCode, param, payload, "learn-nullmsg");
+                    return;
+                }
+                payload = new MessagePayload(normalizedMessage, payload.messageId, payload.senderUserKey, payload.convThreadKey);
+
+                if (!isLikelyChatPayload(payload)) {
+                    maybeLogProbe(gateway, actionCode, param, payload, "learn-skip");
+                    return;
+                }
+
+                boolean safeForLearning = isSafeForApiLearning(payload);
+
+                if (safeForLearning) {
+                    int hitCount = recordActionLearnHit(actionCode);
+                    maybeLogProbe(gateway, actionCode, param, payload, "learn-hit#" + hitCount);
+
+                    if (hitCount >= MIN_API_LEARN_HITS) {
                         Logger.warn("MessageReceivedHook: learned API_NOTIFICATION=" + actionCode
-                                + " (old=" + mRuntimeApiCode + ")");
+                                + " (old=" + mRuntimeApiCode + ", hits=" + hitCount + ")");
                         mRuntimeApiCode = actionCode;
                         gateway.unobfuscator.getPreferences().edit()
                                 .putString(OrcaUnobfuscator.API_NOTIFICATION, String.valueOf(actionCode))
                                 .apply();
-
-                        dispatchMessage(gateway, payload, "learned");
                     }
-                })));
+                } else {
+                    maybeLogProbe(gateway, actionCode, param, payload, "learn-unsafe");
+                }
+
+                dispatchMessage(gateway, payload, safeForLearning ? "learned" : "learned-weak");
+            }
+        });
+
+        if (mRuntimeApiCode > 0) {
+            for (String category : DISPATCH_CATEGORIES) {
+                try {
+                    hooks.addAll(OrcaHookHelper.hookFeature(mRuntimeApiCode,
+                            "V", category, gateway.classLoader, configuredHook));
+                } catch (Throwable t) {
+                    Logger.warn("MessageReceivedHook: failed configured hook for " + category + ": " + t.getMessage());
+                }
+            }
+        } else {
+            Logger.warn("MessageReceivedHook: configured apiCode invalid, relying on discovery hooks");
+        }
+
+        for (String category : DISPATCH_CATEGORIES) {
+            try {
+                hooks.addAll(OrcaHookHelper.hookDispatch(
+                        "V", category, gateway.classLoader, discoveryHook));
+            } catch (Throwable t) {
+                Logger.warn("MessageReceivedHook: failed discovery hook for " + category + ": " + t.getMessage());
+            }
+        }
 
         return hooks;
 
@@ -179,16 +230,26 @@ public class MessageReceivedHook extends BaseHook {
                 stringArgs.add((String) arg);
             } else if (arg instanceof Number && guessedThreadKey <= 0) {
                 long value = ((Number) arg).longValue();
-                if (value > 0) guessedThreadKey = value;
+                if (isLikelyThreadKey(value)) guessedThreadKey = value;
             }
+        }
+
+        if (guessedThreadKey <= 0) {
+            guessedThreadKey = findThreadKeyFromArgs(args);
         }
 
         if (guessedMessageId == null) {
             guessedMessageId = findMessageId(stringArgs);
+            if (guessedMessageId == null) {
+                guessedMessageId = findMessageIdFromArgs(args);
+            }
         }
 
         if (guessedSender == null) {
             guessedSender = findSenderKey(stringArgs);
+            if (guessedSender == null) {
+                guessedSender = findSenderKeyFromArgs(args);
+            }
         }
 
         if (guessedMessage == null) {
@@ -219,6 +280,229 @@ public class MessageReceivedHook extends BaseHook {
             }
         }
         return null;
+    }
+
+    private String findMessageIdFromArgs(Object[] args) {
+        if (args == null) {
+            return null;
+        }
+
+        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Object arg : args) {
+            String candidate = findMessageIdInObject(arg, 3, visited);
+            if (candidate != null) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private String findMessageIdInObject(Object value, int depth, Set<Object> visited) {
+        if (value == null || depth <= 0 || visited.contains(value)) {
+            return null;
+        }
+
+        visited.add(value);
+
+        if (value instanceof String) {
+            String str = ((String) value).trim();
+            if (str.startsWith("mid.") || str.contains("mid.")) {
+                return str;
+            }
+            return null;
+        }
+
+        if (value instanceof List) {
+            for (Object item : (List<?>) value) {
+                String candidate = findMessageIdInObject(item, depth - 1, visited);
+                if (candidate != null) {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+
+        Class<?> type = value.getClass();
+        if (type.isPrimitive() || type.isEnum() || value instanceof Number || value instanceof Boolean || value instanceof Character) {
+            return null;
+        }
+
+        String typeName = type.getName();
+        if (typeName.startsWith("java.lang.") || typeName.startsWith("android.")) {
+            return null;
+        }
+
+        Field[] fields = type.getDeclaredFields();
+        for (Field field : fields) {
+            try {
+                field.setAccessible(true);
+                String candidate = findMessageIdInObject(field.get(value), depth - 1, visited);
+                if (candidate != null) {
+                    return candidate;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return null;
+    }
+
+    private String findSenderKeyFromArgs(Object[] args) {
+        if (args == null) {
+            return null;
+        }
+
+        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Object arg : args) {
+            String candidate = findSenderKeyInObject(arg, 3, visited);
+            if (candidate != null) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private String findSenderKeyInObject(Object value, int depth, Set<Object> visited) {
+        if (value == null || depth <= 0 || visited.contains(value)) {
+            return null;
+        }
+
+        visited.add(value);
+
+        if (value instanceof String) {
+            String str = ((String) value).trim();
+            if (USER_KEY_PATTERN.matcher(str).matches()) {
+                return str;
+            }
+            return null;
+        }
+
+        if (value instanceof List) {
+            for (Object item : (List<?>) value) {
+                String candidate = findSenderKeyInObject(item, depth - 1, visited);
+                if (candidate != null) {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+
+        Class<?> type = value.getClass();
+        if (type.isPrimitive() || type.isEnum() || value instanceof Number || value instanceof Boolean || value instanceof Character) {
+            return null;
+        }
+
+        String typeName = type.getName();
+        if (typeName.startsWith("java.lang.") || typeName.startsWith("android.")) {
+            return null;
+        }
+
+        Field[] fields = type.getDeclaredFields();
+        for (Field field : fields) {
+            try {
+                field.setAccessible(true);
+                String candidate = findSenderKeyInObject(field.get(value), depth - 1, visited);
+                if (candidate != null) {
+                    return candidate;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return null;
+    }
+
+    private long findThreadKeyFromArgs(Object[] args) {
+        if (args == null) {
+            return -1;
+        }
+
+        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Object arg : args) {
+            long candidate = findThreadKeyInObject(arg, 3, visited);
+            if (isLikelyThreadKey(candidate)) {
+                return candidate;
+            }
+        }
+
+        return -1;
+    }
+
+    private long findThreadKeyInObject(Object value, int depth, Set<Object> visited) {
+        if (value == null || depth <= 0 || visited.contains(value)) {
+            return -1;
+        }
+
+        visited.add(value);
+
+        if (value instanceof Number) {
+            long number = ((Number) value).longValue();
+            return isLikelyThreadKey(number) ? number : -1;
+        }
+
+        if (value instanceof String) {
+            String str = ((String) value).trim();
+            if (str.startsWith("T_MESSENGER:")) {
+                String[] parts = str.split(":");
+                for (int i = parts.length - 1; i >= 0; i--) {
+                    try {
+                        long number = Long.parseLong(parts[i]);
+                        if (isLikelyThreadKey(number)) {
+                            return number;
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+
+            if (str.matches("^\\d{10,}$")) {
+                try {
+                    long number = Long.parseLong(str);
+                    if (isLikelyThreadKey(number)) {
+                        return number;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+
+            return -1;
+        }
+
+        if (value instanceof List) {
+            for (Object item : (List<?>) value) {
+                long candidate = findThreadKeyInObject(item, depth - 1, visited);
+                if (isLikelyThreadKey(candidate)) {
+                    return candidate;
+                }
+            }
+            return -1;
+        }
+
+        Class<?> type = value.getClass();
+        if (type.isPrimitive() || type.isEnum() || value instanceof Boolean || value instanceof Character) {
+            return -1;
+        }
+
+        String typeName = type.getName();
+        if (typeName.startsWith("java.lang.") || typeName.startsWith("android.")) {
+            return -1;
+        }
+
+        Field[] fields = type.getDeclaredFields();
+        for (Field field : fields) {
+            try {
+                field.setAccessible(true);
+                long candidate = findThreadKeyInObject(field.get(value), depth - 1, visited);
+                if (isLikelyThreadKey(candidate)) {
+                    return candidate;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return -1;
     }
 
     private String findMessageText(List<String> candidates, String messageId, String senderUserKey) {
@@ -364,6 +648,10 @@ public class MessageReceivedHook extends BaseHook {
             return null;
         }
 
+        if (isSystemSignal(trimmed)) {
+            return null;
+        }
+
         boolean hasLetter = false;
         for (int i = 0; i < trimmed.length(); i++) {
             if (Character.isLetter(trimmed.charAt(i))) {
@@ -379,10 +667,137 @@ public class MessageReceivedHook extends BaseHook {
         if (!payload.isComplete()) return false;
         if (payload.message.length() > 4000) return false;
         if (normalizeIncomingMessage(payload.message) == null) return false;
-        if (payload.convThreadKey <= 0 && (payload.senderUserKey == null || payload.senderUserKey.isEmpty())) {
+        boolean hasSender = payload.senderUserKey != null && USER_KEY_PATTERN.matcher(payload.senderUserKey).matches();
+        boolean hasMessageId = payload.messageId != null && payload.messageId.contains("mid.");
+        boolean hasLikelyThread = isLikelyThreadKey(payload.convThreadKey);
+        if (!hasSender && !hasMessageId && !hasLikelyThread) {
             return false;
         }
         return true;
+    }
+
+    private boolean isLikelyChatPayload(MessagePayload payload) {
+        if (payload == null || !payload.isComplete()) {
+            return false;
+        }
+
+        String normalized = normalizeIncomingMessage(payload.message);
+        if (normalized == null) {
+            return false;
+        }
+
+        boolean hasSender = payload.senderUserKey != null && USER_KEY_PATTERN.matcher(payload.senderUserKey).matches();
+        boolean hasMessageId = payload.messageId != null && payload.messageId.contains("mid.");
+        if (hasSender || hasMessageId) {
+            return true;
+        }
+
+        // Fallback: allow natural text with spaces if thread key looks valid.
+        return isLikelyThreadKey(payload.convThreadKey) && normalized.contains(" ");
+    }
+
+    private boolean isSafeForApiLearning(MessagePayload payload) {
+        if (payload == null) {
+            return false;
+        }
+
+        boolean hasSender = payload.senderUserKey != null && USER_KEY_PATTERN.matcher(payload.senderUserKey).matches();
+        boolean hasMessageId = payload.messageId != null && payload.messageId.contains("mid.");
+        return hasSender || hasMessageId;
+    }
+
+    private boolean isSystemSignal(String value) {
+        String lower = value.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("should_present_")) {
+            return true;
+        }
+        if (lower.contains("security_alert") || lower.contains("peer_device_change")) {
+            return true;
+        }
+
+        // Machine event identifiers are usually long underscore tokens.
+        return lower.matches("^[a-z0-9_]{18,}$");
+    }
+
+    private boolean isLikelyThreadKey(long value) {
+        if (value <= 0) {
+            return false;
+        }
+
+        // Real thread keys are large positive identifiers, not tiny counters/flags.
+        return value >= 1_000_000_000L;
+    }
+
+    private int recordActionLearnHit(int actionCode) {
+        synchronized (mActionLearnHits) {
+            int next = mActionLearnHits.getOrDefault(actionCode, 0) + 1;
+            mActionLearnHits.put(actionCode, next);
+            return next;
+        }
+    }
+
+    private void maybeLogProbe(OrcaGateway gateway,
+                               int actionCode,
+                               XC_MethodHook.MethodHookParam param,
+                               MessagePayload payload,
+                               String reason) {
+        if (gateway == null || gateway.pref == null || !gateway.pref.isTypingCaptureDebugEnabled()) {
+            return;
+        }
+
+        synchronized (this) {
+            if (mProbeLogCount >= MAX_PROBE_LOGS) {
+                return;
+            }
+            mProbeLogCount++;
+        }
+
+        String methodName = "unknown";
+        if (param != null && param.method instanceof Method) {
+            methodName = ((Method) param.method).getName();
+        }
+
+        Logger.info("MessageReceivedHook: probe[" + reason + "] action=" + actionCode
+                + " method=" + methodName
+                + " payload={msg=" + safeLog(payload != null ? payload.message : null, 80)
+                + ", mid=" + safeLog(payload != null ? payload.messageId : null, 48)
+                + ", sender=" + safeLog(payload != null ? payload.senderUserKey : null, 32)
+                + ", tk=" + (payload != null ? payload.convThreadKey : -1L)
+                + "} args=" + summarizeArgs(param != null ? param.args : null));
+    }
+
+    private String summarizeArgs(Object[] args) {
+        if (args == null) {
+            return "[]";
+        }
+
+        StringBuilder sb = new StringBuilder("[");
+        int max = Math.min(args.length, 12);
+        for (int i = 0; i < max; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            Object arg = args[i];
+            if (arg == null) {
+                sb.append(i).append(":null");
+                continue;
+            }
+
+            sb.append(i).append(":").append(arg.getClass().getSimpleName());
+            if (arg instanceof String) {
+                sb.append("=").append(safeLog((String) arg, 40));
+            } else if (arg instanceof Number || arg instanceof Boolean) {
+                sb.append("=").append(arg);
+            }
+        }
+
+        if (args.length > max) {
+            sb.append(", ...+").append(args.length - max).append(" args");
+        }
+
+        sb.append("]");
+        return sb.toString();
     }
 
     private boolean isDuplicateEvent(MessagePayload payload, long resolvedThreadKey) {

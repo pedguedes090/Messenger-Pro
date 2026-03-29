@@ -110,8 +110,13 @@ public class ActivityHook {
                 if (TargetActivity.isInstance(param.thisObject)) {
                     MotionEvent event = (MotionEvent) param.args[0];
 
-                    if (listener.onDispatchTouchEvent(event)) {
-                        param.setResult(true);
+                    try {
+                        if (listener.onDispatchTouchEvent(event)) {
+                            param.setResult(true);
+                        }
+                    } catch (Throwable t) {
+                        Logger.error("ActivityHook: dispatchTouch listener error: " + t.getMessage());
+                        Logger.error(t);
                     }
                 }
             }
