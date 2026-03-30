@@ -18,8 +18,14 @@ import tn.amin.mpro2.orca.OrcaGateway;
 
 public class SeenIndicatorHook extends BaseHook {
     private static final int ACTION_TYPING_SUBSCRIPTION = 81;
+    private static final int ACTION_TYPING_OUTBOUND_V553 = 88;
     private static final int ACTION_SEEN_DISPATCH_V553 = 62;
     private static final int ACTION_MARK_READ_DISPATCH_V553 = 23;
+    private static final int ACTION_CONVERSATION_ENTER = 6;
+    private static final int ACTION_CONVERSATION_LEAVE = 7;
+    private static final int ACTION_PRESENCE_ORCA_V553 = 8;
+    private static final int ACTION_MESSAGE_SEND_V552 = 61;
+    private static final int ACTION_MESSAGE_SEND_V553 = 71;
     private static final String MAILBOX_ORCA_JNI = "com.facebook.orca.mca.MailboxOrcaJNI";
     private static final int DEBUG_MISS_LOG_LIMIT = 200;
 
@@ -65,6 +71,10 @@ public class SeenIndicatorHook extends BaseHook {
                 ) && (param.args[3] != null && param.args[3].getClass().getName().equals(Long.class.getName()));
 
                 String threadToken = findThreadTokenArg(param.args);
+                boolean hasThreadToken = threadToken != null;
+                boolean hasNotificationScope = hasNotificationScopeArg(param.args);
+                boolean hasBoolean = hasBooleanArg(param.args);
+                boolean excludedAction = isExcludedActionCode(actionCode);
 
                 // Messenger 553 pattern observed in logs:
                 // dispatchVOOOOOZ(Integer=62, Mailbox, threadToken, "", null, NotificationScope, Boolean)
@@ -73,17 +83,26 @@ public class SeenIndicatorHook extends BaseHook {
                     && actionCode == ACTION_SEEN_DISPATCH_V553
                     && methodName.startsWith("dispatchV")
                     && param.args.length >= 5
-                    && threadToken != null
-                    && hasNotificationScopeArg(param.args)
-                    && hasBooleanArg(param.args);
+                    && hasThreadToken
+                    && hasNotificationScope
+                    && hasBoolean;
+
+                // Version-resilient fallback for "seen-like" thread-scoped notification dispatches
+                // where action codes can drift between Messenger builds.
+                boolean matchesThreadScopedSeenFallback = !excludedAction
+                        && methodName.startsWith("dispatchV")
+                        && param.args.length >= 5
+                        && hasThreadToken
+                        && hasNotificationScope
+                        && hasBoolean;
 
                     // User-requested hard block for 81 path.
                     // Common shape: dispatchVOOOO(Integer=81, Mailbox, threadToken, null, NotificationScope)
                         boolean matchesV553SubscriptionSeen = actionCode == ACTION_TYPING_SUBSCRIPTION
                             && methodName.startsWith("dispatchV")
                             && param.args.length >= 4
-                            && threadToken != null
-                            && hasNotificationScopeArg(param.args);
+                            && hasThreadToken
+                            && hasNotificationScope;
 
                     // Messenger 553 can also issue a compact mark-read dispatch:
                     // dispatchVO(Integer=23, Mailbox)
@@ -93,10 +112,18 @@ public class SeenIndicatorHook extends BaseHook {
                         && param.args.length >= 2
                         && param.args.length <= 4;
 
+                    // Compact mark-read fallback used by some versions/flows (especially private chats).
+                    boolean matchesCompactMarkReadFallback = !excludedAction
+                            && "dispatchVO".equals(methodName)
+                            && param.args.length == 2
+                            && isMailboxArg(param.args[1]);
+
                         boolean matchesSeen = matchesLegacySeen
                             || matchesV553Seen
+                            || matchesThreadScopedSeenFallback
                             || matchesV553SubscriptionSeen
-                            || matchesV553MarkRead;
+                            || matchesV553MarkRead
+                            || matchesCompactMarkReadFallback;
 
                 if (matchesSeen) {
                     notifyListenersWithResult((listener) -> ((SeenIndicatorListener) listener).onSeenIndicator());
@@ -151,14 +178,27 @@ public class SeenIndicatorHook extends BaseHook {
     private boolean hasMailboxArgNearStart(Object[] args) {
         if (args == null) return false;
         for (int i = 1; i < Math.min(args.length, 5); i++) {
-            if (args[i] == null) continue;
-
-            String cls = args[i].getClass().getName();
-            if (OrcaClassNames.MAILBOX.equals(cls) || cls.contains(".msys.mca.Mailbox")) {
+            if (isMailboxArg(args[i])) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean isMailboxArg(Object arg) {
+        if (arg == null) return false;
+
+        String cls = arg.getClass().getName();
+        return OrcaClassNames.MAILBOX.equals(cls) || cls.contains(".msys.mca.Mailbox");
+    }
+
+    private boolean isExcludedActionCode(int actionCode) {
+        return actionCode == ACTION_CONVERSATION_ENTER
+                || actionCode == ACTION_CONVERSATION_LEAVE
+                || actionCode == ACTION_PRESENCE_ORCA_V553
+                || actionCode == ACTION_MESSAGE_SEND_V552
+                || actionCode == ACTION_MESSAGE_SEND_V553
+                || actionCode == ACTION_TYPING_OUTBOUND_V553;
     }
 
     private synchronized boolean shouldLogDebugMiss() {
