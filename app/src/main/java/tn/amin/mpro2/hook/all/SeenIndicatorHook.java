@@ -21,6 +21,7 @@ public class SeenIndicatorHook extends BaseHook {
     private static final int ACTION_TYPING_OUTBOUND_V553 = 88;
     private static final int ACTION_SEEN_DISPATCH_V553 = 62;
     private static final int ACTION_MARK_READ_DISPATCH_V553 = 23;
+    private static final int ACTION_SEEN_CANDIDATE_V553_ALT = 10;
     private static final int ACTION_CONVERSATION_ENTER = 6;
     private static final int ACTION_CONVERSATION_LEAVE = 7;
     private static final int ACTION_PRESENCE_ORCA_V553 = 8;
@@ -118,12 +119,21 @@ public class SeenIndicatorHook extends BaseHook {
                             && param.args.length == 2
                             && isMailboxArg(param.args[1]);
 
+                            // Additional candidate observed while opening chats on v553:
+                        // - dispatchVOOO(Integer=10, Mailbox, NativeHolder, null)
+                        boolean matchesSeenCandidateAction10 = actionCode == ACTION_SEEN_CANDIDATE_V553_ALT
+                            && "dispatchVOOO".equals(methodName)
+                            && param.args.length == 4
+                            && isMailboxArg(param.args[1])
+                            && isNativeHolderArg(param.args[2]);
+
                         boolean matchesSeen = matchesLegacySeen
                             || matchesV553Seen
                             || matchesThreadScopedSeenFallback
                             || matchesV553SubscriptionSeen
                             || matchesV553MarkRead
-                            || matchesCompactMarkReadFallback;
+                            || matchesCompactMarkReadFallback
+                            || matchesSeenCandidateAction10;
 
                 if (matchesSeen) {
                     notifyListenersWithResult((listener) -> ((SeenIndicatorListener) listener).onSeenIndicator());
@@ -190,6 +200,13 @@ public class SeenIndicatorHook extends BaseHook {
 
         String cls = arg.getClass().getName();
         return OrcaClassNames.MAILBOX.equals(cls) || cls.contains(".msys.mca.Mailbox");
+    }
+
+    private boolean isNativeHolderArg(Object arg) {
+        if (arg == null) return false;
+
+        String cls = arg.getClass().getName();
+        return cls.contains("NativeHolder") || cls.contains("simplejni");
     }
 
     private boolean isExcludedActionCode(int actionCode) {
