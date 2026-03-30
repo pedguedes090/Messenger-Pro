@@ -56,40 +56,34 @@ public class SeenIndicatorHook extends BaseHook {
 
                 // Legacy seen-indicator pattern: Mailbox in args[1] or args[2], args[3] is Long.
                 // Null in args[3] matches non-seen dispatches (including typing-related calls).
-                if (param.args.length < 4) return;
                 boolean matchesLegacySeen = configuredSeenApiCode > 0
+                    && param.args.length >= 4
                         && actionCode == configuredSeenApiCode
                         && (
                     (param.args[1] != null && param.args[1].getClass().getName().equals(OrcaClassNames.MAILBOX)) ||
                     (param.args.length > 2 && param.args[2] != null && param.args[2].getClass().getName().equals(OrcaClassNames.MAILBOX))
                 ) && (param.args[3] != null && param.args[3].getClass().getName().equals(Long.class.getName()));
 
+                String threadToken = findThreadTokenArg(param.args);
+
                 // Messenger 553 pattern observed in logs:
                 // dispatchVOOOOOZ(Integer=62, Mailbox, threadToken, "", null, NotificationScope, Boolean)
+                // Keep this resilient to arg index shifts across one-to-one vs group variants.
                 boolean matchesV553Seen = actionCode != null
-                        && actionCode == ACTION_SEEN_DISPATCH_V553
+                    && actionCode == ACTION_SEEN_DISPATCH_V553
                     && methodName.startsWith("dispatchV")
-                        && param.args.length >= 7
-                        && param.args[1] != null
-                        && param.args[1].getClass().getName().equals(OrcaClassNames.MAILBOX)
-                        && param.args[2] instanceof String
-                        && ((String) param.args[2]).startsWith("T_")
-                        && param.args[5] != null
-                        && param.args[5].getClass().getName().contains("NotificationScope")
-                        && param.args[6] instanceof Boolean;
+                    && param.args.length >= 5
+                    && threadToken != null
+                    && hasNotificationScopeArg(param.args)
+                    && hasBooleanArg(param.args);
 
                     // User-requested hard block for 81 path.
                     // Common shape: dispatchVOOOO(Integer=81, Mailbox, threadToken, null, NotificationScope)
-                    boolean matchesV553SubscriptionSeen = actionCode == ACTION_TYPING_SUBSCRIPTION
-                            && "dispatchVOOOO".equals(methodName)
-                            && param.args.length >= 5
-                            && param.args[1] != null
-                            && OrcaClassNames.MAILBOX.equals(param.args[1].getClass().getName())
-                            && param.args[2] instanceof String
-                            && ((String) param.args[2]).startsWith("T_")
-                            && param.args[3] == null
-                            && param.args[4] != null
-                            && param.args[4].getClass().getName().contains("NotificationScope");
+                        boolean matchesV553SubscriptionSeen = actionCode == ACTION_TYPING_SUBSCRIPTION
+                            && methodName.startsWith("dispatchV")
+                            && param.args.length >= 4
+                            && threadToken != null
+                            && hasNotificationScopeArg(param.args);
 
                     // Messenger 553 can also issue a compact mark-read dispatch:
                     // dispatchVO(Integer=23, Mailbox)
@@ -97,9 +91,7 @@ public class SeenIndicatorHook extends BaseHook {
                         && actionCode == ACTION_MARK_READ_DISPATCH_V553
                         && methodName.startsWith("dispatchV")
                         && param.args.length >= 2
-                        && param.args.length <= 4
-                        && param.args[1] != null
-                        && param.args[1].getClass().getName().equals(OrcaClassNames.MAILBOX);
+                        && param.args.length <= 4;
 
                         boolean matchesSeen = matchesLegacySeen
                             || matchesV553Seen
@@ -159,7 +151,10 @@ public class SeenIndicatorHook extends BaseHook {
     private boolean hasMailboxArgNearStart(Object[] args) {
         if (args == null) return false;
         for (int i = 1; i < Math.min(args.length, 5); i++) {
-            if (args[i] != null && OrcaClassNames.MAILBOX.equals(args[i].getClass().getName())) {
+            if (args[i] == null) continue;
+
+            String cls = args[i].getClass().getName();
+            if (OrcaClassNames.MAILBOX.equals(cls) || cls.contains(".msys.mca.Mailbox")) {
                 return true;
             }
         }
@@ -170,6 +165,59 @@ public class SeenIndicatorHook extends BaseHook {
         if (mDebugMissLogCount >= DEBUG_MISS_LOG_LIMIT) return false;
         mDebugMissLogCount++;
         return true;
+    }
+
+    private boolean isThreadTokenLike(String value) {
+        if (value == null) return false;
+
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) return false;
+
+        return trimmed.startsWith("T_")
+                || trimmed.startsWith("ONE_TO_ONE")
+                || trimmed.startsWith("GROUP")
+                || trimmed.startsWith("THREAD")
+                || trimmed.contains(":");
+    }
+
+    private String findThreadTokenArg(Object[] args) {
+        if (args == null) return null;
+
+        for (Object arg : args) {
+            if (!(arg instanceof String)) continue;
+
+            String candidate = (String) arg;
+            if (isThreadTokenLike(candidate)) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean hasNotificationScopeArg(Object[] args) {
+        if (args == null) return false;
+
+        for (Object arg : args) {
+            if (arg == null) continue;
+            if (arg.getClass().getName().contains("NotificationScope")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean hasBooleanArg(Object[] args) {
+        if (args == null) return false;
+
+        for (Object arg : args) {
+            if (arg instanceof Boolean) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private String summarizeArgs(Object[] args) {
