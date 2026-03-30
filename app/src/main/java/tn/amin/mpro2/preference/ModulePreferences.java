@@ -69,6 +69,57 @@ public class ModulePreferences {
         return sp.getBoolean("mpro_debug_typing_force_block", false);
     }
 
+    public boolean isPresenceCaptureDebugEnabled() {
+        return sp.getBoolean("mpro_debug_presence_capture", false);
+    }
+
+    public boolean isPresenceForceBlockEnabled() {
+        return sp.getBoolean("mpro_debug_presence_force_block", false);
+    }
+
+    public int getPresenceBlockActionCode() {
+        try {
+            return sp.getInt("mpro_debug_presence_action_code", -1);
+        } catch (ClassCastException ignored) {
+        }
+
+        try {
+            String raw = sp.getString("mpro_debug_presence_action_code", "-1");
+            return Integer.parseInt(raw);
+        } catch (Throwable ignored) {
+        }
+
+        return -1;
+    }
+
+    public Set<Integer> getPresenceBlockActionCodes() {
+        Set<Integer> actionCodes = new HashSet<>();
+
+        int singleCode = getPresenceBlockActionCode();
+        if (singleCode > 0) {
+            actionCodes.add(singleCode);
+        }
+
+        String csv = sp.getString("mpro_debug_presence_action_codes", "");
+        if (csv != null) {
+            String[] parts = csv.split(",");
+            for (String part : parts) {
+                if (part == null) continue;
+
+                String trimmed = part.trim();
+                if (trimmed.isEmpty()) continue;
+
+                try {
+                    int code = Integer.parseInt(trimmed);
+                    if (code > 0) actionCodes.add(code);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+
+        return actionCodes;
+    }
+
     public boolean isMailboxDiscoveryDebugEnabled() {
         return sp.getBoolean("mpro_debug_mailbox_discovery", false);
     }

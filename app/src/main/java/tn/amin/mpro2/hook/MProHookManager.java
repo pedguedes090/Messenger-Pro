@@ -6,6 +6,7 @@ import tn.amin.mpro2.hook.all.ConversationLeaveHook;
 import tn.amin.mpro2.hook.all.MessageSentHook;
 import tn.amin.mpro2.hook.all.MediaTranscoderHook;
 import tn.amin.mpro2.hook.all.MessagesDisplayHook;
+import tn.amin.mpro2.hook.all.PresenceStatusSentHook;
 import tn.amin.mpro2.hook.all.SeenIndicatorHook;
 import tn.amin.mpro2.hook.all.TypingIndicatorReceivedHook;
 import tn.amin.mpro2.hook.all.TypingIndicatorSentHook;
@@ -23,6 +24,7 @@ public class MProHookManager extends HookManager {
         addHook(new MessageSentHook());
         addHook(new TypingIndicatorSentHook());
         addHook(new TypingIndicatorReceivedHook());
+        addHook(new PresenceStatusSentHook());
         addHook(new CameraLaunchHook());
         addHook(new MediaTranscoderHook());
         addHook(new MessagesDisplayHook());

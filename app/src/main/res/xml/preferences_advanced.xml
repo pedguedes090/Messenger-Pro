@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
     <PreferenceCategory
         android:title="@string/settings_category_diagnostics" />
 
@@ -39,6 +40,34 @@
         android:key="mpro_debug_typing_force_block"
         android:title="@string/pref_debug_typing_force_block"
         android:summary="@string/pref_debug_typing_force_block_summary" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_debug_presence_capture"
+        android:title="@string/pref_debug_presence_capture"
+        android:summary="@string/pref_debug_presence_capture_summary" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_debug_presence_force_block"
+        android:title="@string/pref_debug_presence_force_block"
+        android:summary="@string/pref_debug_presence_force_block_summary" />
+
+    <EditTextPreference
+        android:defaultValue="-1"
+        android:key="mpro_debug_presence_action_code"
+        android:title="@string/pref_debug_presence_action_code"
+        android:summary="@string/pref_debug_presence_action_code_summary"
+        android:inputType="numberSigned"
+        app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
+        android:defaultValue=""
+        android:key="mpro_debug_presence_action_codes"
+        android:title="@string/pref_debug_presence_action_codes"
+        android:summary="@string/pref_debug_presence_action_codes_summary"
+        android:inputType="text"
+        app:useSimpleSummaryProvider="true" />
 
     <SwitchPreference
         android:defaultValue="false"

@@ -78,6 +78,8 @@
     <string name="last_typing_userkey">User Key</string>
     <string name="pref_disable_typing_indicator">Prevent typing indicator</string>
     <string name="pref_disable_typing_indicator_summary">Others won\u2019t see when you\u2019re typing</string>
+    <string name="pref_disable_presence_status">Prevent active status updates</string>
+    <string name="pref_disable_presence_status_summary">Block outgoing online/activity presence updates while keeping incoming status visibility</string>
     <string name="pref_allow_logs">Allow verbose logs</string>
     <string name="pref_allow_logs_summary">Write detailed debug logs (may affect performance)</string>
     <string name="pref_message_history">Save local message history</string>
@@ -127,6 +129,14 @@
     <string name="pref_debug_typing_capture_summary">Log candidate typing dispatch calls and arguments</string>
     <string name="pref_debug_typing_force_block">Typing force block (debug)</string>
     <string name="pref_debug_typing_force_block_summary">Block all typing-like dispatch candidates (use for diagnosis only)</string>
+    <string name="pref_debug_presence_capture">Presence debug capture</string>
+    <string name="pref_debug_presence_capture_summary">Log candidate outgoing presence/activity dispatch calls</string>
+    <string name="pref_debug_presence_force_block">Presence force block (debug)</string>
+    <string name="pref_debug_presence_force_block_summary">Block presence-like outgoing dispatch candidates without action-code pinning (diagnosis only)</string>
+    <string name="pref_debug_presence_action_code">Presence action code (single)</string>
+    <string name="pref_debug_presence_action_code_summary">Main action code to block. Set -1 to disable single-code pinning.</string>
+    <string name="pref_debug_presence_action_codes">Presence action codes (CSV)</string>
+    <string name="pref_debug_presence_action_codes_summary">Optional comma-separated list, e.g. 8,12,34</string>
     <string name="pref_debug_mailbox_discovery">Mailbox discovery (debug)</string>
     <string name="pref_debug_mailbox_discovery_summary">Enable deep 7Da discovery hooks and detailed send-file diagnostics</string>
     <string name="pref_hookstate_summary">View hook activation status</string>

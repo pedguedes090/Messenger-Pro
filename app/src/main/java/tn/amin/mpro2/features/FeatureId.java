@@ -7,6 +7,7 @@ public enum FeatureId {
     SETTINGS_LAUNCH,
     UNSEEN,
     UNTYPING,
+    PRESENCE_STEALTH,
     TYPING,
     FORMATTING,
     FILE_ATTACH,
