@@ -48,6 +48,10 @@ public class PresenceStatusSentHook extends BaseHook {
     private static final int ACTION_MESSAGE_SEND_V552 = 61;
     private static final int ACTION_CONVERSATION_ENTER = 6;
     private static final int ACTION_CONVERSATION_LEAVE = 7;
+    private static final int ACTION_PRESENCE_STATUS_DEFAULT = 8;
+
+    private static final Set<Integer> DEFAULT_PRESENCE_ACTION_CODES =
+            Collections.singleton(ACTION_PRESENCE_STATUS_DEFAULT);
 
     private int mCaptureLogCount = 0;
 
@@ -69,22 +73,26 @@ public class PresenceStatusSentHook extends BaseHook {
             ? gateway.pref.getPresenceBlockActionCodes()
             : Collections.emptySet();
 
+        Set<Integer> effectiveActionCodes = new HashSet<>(DEFAULT_PRESENCE_ACTION_CODES);
+        effectiveActionCodes.addAll(configuredActionCodes);
+
         Logger.info("PresenceStatusSentHook: captureDebug=" + captureDebug
                 + " forceBlock=" + forceBlock
-            + " actionCodes=" + configuredActionCodes);
+                + " configuredActionCodes=" + configuredActionCodes
+                + " effectiveActionCodes=" + effectiveActionCodes);
 
         Set<XC_MethodHook.Unhook> unhooks = new HashSet<>();
         hookDispatchMethods(unhooks, gateway.classLoader, OrcaClassNames.MAILBOX_SDK_JNI, "SDK",
-            captureDebug, forceBlock, configuredActionCodes);
+            captureDebug, forceBlock, effectiveActionCodes);
         hookDispatchMethods(unhooks, gateway.classLoader, OrcaClassNames.MAILBOX_CORE_JNI, "CORE",
-            captureDebug, forceBlock, configuredActionCodes);
+            captureDebug, forceBlock, effectiveActionCodes);
         hookDispatchMethods(unhooks, gateway.classLoader, MAILBOX_ORCA_JNI, "ORCA",
-            captureDebug, forceBlock, configuredActionCodes);
+            captureDebug, forceBlock, effectiveActionCodes);
 
         for (String extraClass : EXTRA_MAILBOX_JNI_CLASSES) {
             String tag = extraClass.replace("com.facebook.", "").replace(".mca", "").replace("Mailbox", "").replace("JNI", "").toUpperCase(Locale.ROOT);
             hookDispatchMethods(unhooks, gateway.classLoader, extraClass, tag,
-                captureDebug, forceBlock, configuredActionCodes);
+                captureDebug, forceBlock, effectiveActionCodes);
         }
         return unhooks;
     }
