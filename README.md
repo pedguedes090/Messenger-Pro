@@ -22,7 +22,7 @@
    https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-553-0-0-60-55-release/facebook-messenger-553-0-0-60-55-6-android-apk-download/?redirected=thank_you_invalid_nonce
 3. Tải và cài MRVPatch Manager:
    https://github.com/NeonOrbit/MRVPatchManager/releases/tag/v2.3.7
-4. Tải file `mPro-v1.2.6-debug.apk` trong mục Releases của repo này.
+4. Tải file `mPro-v1.2.7-debug.apk` trong mục Releases của repo này.
 5. Mở MRVPatch Manager, vào Settings.
 6. Chọn Advanced configurations.
 7. Bật Allow third-party modules.
@@ -41,4 +41,4 @@ Windows PowerShell:
 
 APK output:
 
-- `app/build/outputs/apk/debug/mPro-v1.2.6-debug.apk`
+- `app/build/outputs/apk/debug/mPro-v1.2.7-debug.apk`
