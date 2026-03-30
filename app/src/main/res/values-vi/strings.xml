@@ -61,6 +61,8 @@
     <string name="last_typing_userkey">Khoá người dùng</string>
     <string name="pref_disable_typing_indicator">Chặn trạng thái đang nhập</string>
     <string name="pref_disable_typing_indicator_summary">Người khác sẽ không thấy khi bạn đang soạn tin</string>
+    <string name="pref_disable_presence_status">Chặn cập nhật trạng thái hoạt động</string>
+    <string name="pref_disable_presence_status_summary">Chặn việc gửi trạng thái online/hoạt động của bạn nhưng vẫn hiển thị trạng thái của người khác</string>
     <string name="pref_allow_logs">Cho phép ghi log chi tiết</string>
     <string name="pref_allow_logs_summary">Ghi log debug chi tiết (có thể ảnh hưởng hiệu năng)</string>
     <string name="title_activity_about">Giới thiệu Messenger Pro</string>
@@ -99,6 +101,14 @@
     <string name="pref_debug_typing_capture_summary">Ghi log các dispatch nghi ngờ typing và tham số</string>
     <string name="pref_debug_typing_force_block">Chặn mạnh typing (debug)</string>
     <string name="pref_debug_typing_force_block_summary">Chặn toàn bộ dispatch nghi ngờ typing (chỉ dùng chẩn đoán)</string>
+    <string name="pref_debug_presence_capture">Bắt log debug presence</string>
+    <string name="pref_debug_presence_capture_summary">Ghi log các dispatch nghi ngờ gửi trạng thái online/hoạt động</string>
+    <string name="pref_debug_presence_force_block">Chặn mạnh presence (debug)</string>
+    <string name="pref_debug_presence_force_block_summary">Chặn các dispatch nghi ngờ presence mà không cần cố định action code (chỉ dùng chẩn đoán)</string>
+    <string name="pref_debug_presence_action_code">Mã action presence (đơn)</string>
+    <string name="pref_debug_presence_action_code_summary">Mã action chính để chặn. Đặt -1 để tắt chặn theo một mã.</string>
+    <string name="pref_debug_presence_action_codes">Các mã action presence (CSV)</string>
+    <string name="pref_debug_presence_action_codes_summary">Danh sách tuỳ chọn phân tách bằng dấu phẩy, ví dụ: 8,12,34</string>
     <string name="threadkey_copied">Đã sao chép ThreadKey</string>
     <string name="please_enable_lock">Vui lòng bật tính năng \"Khoá hội thoại\" trong cài đặt</string>
 
