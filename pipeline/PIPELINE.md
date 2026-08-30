@@ -119,17 +119,22 @@ guava 27.1-android, jsr305 3.0.2 (Maven Central); ARSCLib V1.4.0 (JitPack).
 
 ---
 
-## Messenger patch (module injection - Phase 3)
+## Messenger patch (module injection - VERIFIED)
 
-Injecting the module into Messenger uses **MRVPatchManager** (an LSPatch fork):
+Injecting the module into Messenger uses **MRVPatcher** (an LSPatch fork) as a
+runnable JAR. Its `MRVPatcher.patch(args)` == `LSPatch.main(args)`, and it
+embeds the fixed MRV private keystore (`assets/mrvkey.jks`, pass `123456`).
 
 ```
-java -jar mrvpatch-cli.jar --modules tn.amin.mpro2 app.neonorbit.chatheadenabler --fix-conf --mask-pkg --fallback --key-args MRV_PUBLIC_SIGNATURE -o messenger-patched.apk messenger-576.apk
+java -jar MRVPatcher-5.8.1.jar Messenger-576.apk -o out -f --modules tn.amin.mpro2
 ```
 
-See `pipeline/messenger/README.md`. This step requires a host-compiled
-MRVPatchManager CLI (Phase 3); the module APK itself is built with
-`./gradlew assembleDebug`.
+Verified against the hand-patched Messenger (release v1.2.9): same MRV cert
+(SHA-256 `217d4345ad36c9dce82da6ad5494b7c68a84e1077893fe0eb9f14c428d3e259c`)
+and same config.json (`exModules:["tn.amin.mpro2"]`).
+
+See `pipeline/messenger/README.md` for the full CLI reference. The module APK
+is built with `./gradlew assembleDebug`.
 
 ---
 
