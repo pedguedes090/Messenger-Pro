@@ -97,8 +97,11 @@ Steps performed by `run.sh`:
    resources, so ARSCLib merges the compiled tables directly.
 6. **Integrate ads dex** - swap the ads-patched `secondary-1.dex` back in and
    refresh its SHA-1.
-7. **Align + sign** - `zipalign -f -p 4` (Android 16 requires `resources.arsc`
-   stored uncompressed + 4-byte aligned) then `apksigner`.
+7. **MRV patch + sign** - `java -jar MRVPatcher-5.8.1.jar merged.apk -p -o out -f`
+   (VERIFIED: injects the LSPatch loader with empty `exModules` and re-signs
+   with the fixed MRV key, so Facebook shares Messenger's signature). Output
+   matches the hand-patched Facebook in release v1.2.9 byte-for-byte in
+   config + cert.
 
 Dependencies (fetched automatically): dexlib2 2.5.2, util 2.5.2,
 guava 27.1-android, jsr305 3.0.2 (Maven Central); ARSCLib V1.4.0 (JitPack).

@@ -23,6 +23,18 @@ bash run.sh
 Output: `out/Facebook-576-patched.apk` (single APK, story-seen + feed ads
 blocked).
 
+## MRV sign (final, for shared login with Messenger)
+
+Re-sign + inject the LSPatch loader with the fixed MRV key (VERIFIED):
+
+```
+java -jar MRVPatcher-5.8.1.jar out/Facebook-576-patched.apk -p -o out -f
+```
+
+Produces `out/Facebook-576-patched-mrv.apk`, signed with the MRV key
+(`217d4345ad36c9dce82da6ad5494b7c68a84e1077893fe0eb9f14c428d3e259c`) so it
+shares Messenger's signature.
+
 ## What it patches
 
 - `LX/BII;.A00` (story-seen, `secondary-5.dex`) - no-op.
