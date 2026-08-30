@@ -39,6 +39,7 @@ import tn.amin.mpro2.features.util.biometric.ConversationLock;
 import tn.amin.mpro2.file.StorageConstants;
 import tn.amin.mpro2.orca.OrcaBridge;
 import tn.amin.mpro2.preference.MapSharedPreferences;
+import tn.amin.mpro2.settings.history.HistoryThreadsFragment;
 import tn.amin.mpro2.settings.hookstate.HookStateFragment;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -433,6 +434,7 @@ public class SettingsActivity extends AppCompatActivity {
             linkPreferenceToFragment("mpro_root_features", SettingsType.FEATURES, "fragPreferences");
             linkPreferenceToFragment("mpro_root_toolbar", SettingsType.TOOLBAR, "fragToolbar");
             linkPreferenceToFragment("mpro_root_advanced", SettingsType.ADVANCED, "fragAdvanced");
+            linkPreferenceToFragment("mpro_root_history", new HistoryThreadsFragment(), "fragHistory", SettingsType.CHAT_HISTORY);
             linkPreferenceToActivity("mpro_root_about", new ComponentName("tn.amin.mpro2", "tn.amin.mpro2.AboutActivity"));
         }
 

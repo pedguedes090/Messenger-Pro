@@ -35,7 +35,7 @@ public class MessageSentHook extends BaseHook {
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                 Logger.verbose("MESSAGE_SEND[NEW]");
                 int actionCode = (Integer) param.args[0];
-                if (actionCode == 61 || actionCode == 71) {
+                if (actionCode == 61 || actionCode == 71 || actionCode == 74) {
                     String message = (String) param.args[3];
 
                     Object options = param.args[4];

@@ -19,7 +19,7 @@ import tn.amin.mpro2.hook.unobfuscation.OrcaUnobfuscator;
 import tn.amin.mpro2.orca.OrcaGateway;
 
 public class TypingIndicatorSentHook extends BaseHook {
-    private static final int OUTBOUND_TYPING_ACTION_V553 = 88;
+    private static final int OUTBOUND_TYPING_ACTION_V553 = 91; // 91 in Messenger 576 (was 88)
     private static final String OUTBOUND_TYPING_METHOD_V553 = "dispatchVOOOZ";
 
     private static final Set<String> KNOWN_TYPING_DISPATCH_METHODS = new HashSet<>(Arrays.asList(

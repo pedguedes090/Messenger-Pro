@@ -23,6 +23,8 @@ public class StorageConstants {
     public static final File moduleFiles = new File(orcaExternalFiles, "mpro_files");
     public static final File moduleInternalCache = new File(orcaInternalCache, "mpro_cache");
     public static final File modulePictures = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MessengerPro");
+    public static final File moduleHistory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "MessengerPro");
+    public static final File moduleHistoryDb = new File("/data/data/tn.amin.mpro2/databases/mpro_history.db");
 
     public static final Uri orcaUri = DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Android/data/com.facebook.orca");
     public static final String orcaFilesRelSdcard = "Android/data/com.facebook.orca";
@@ -34,6 +36,7 @@ public class StorageConstants {
         moduleFiles.mkdirs();
         moduleInternalCache.mkdirs();
         modulePictures.mkdirs();
+        moduleHistory.mkdirs();
     }
 
     public static SharedPreferences getHookStatePref(Context context) {

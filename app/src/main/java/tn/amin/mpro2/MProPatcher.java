@@ -212,9 +212,6 @@ public class MProPatcher implements
         // If so, reset everything and search again for methods
         if (gateway.state.hasOrcaVersionChanged() || gateway.state.hasModuleVersionChanged()) {
             Logger.info("Detected version change");
-            new Handler(Looper.getMainLooper()).post(() -> {
-                Toast.makeText(getContext(), "New messenger / MPro installation or update detected", Toast.LENGTH_LONG).show();
-            });
 
             // States are only useful for debugging,
             // they appear in Settings > Advanced > Hooks state
@@ -241,7 +238,7 @@ public class MProPatcher implements
 
     private void installMailboxDiscoveryHooks(boolean enableExtendedDiscovery) {
         try {
-            Class<?> cls7Da = XposedHelpers.findClass("X.7Da", gateway.classLoader);
+            Class<?> cls7Da = XposedHelpers.findClass("X.6yx", gateway.classLoader);
             int hooksInstalled = 0;
             hooksInstalled += hook7DaMethod(cls7Da, "A0N", enableExtendedDiscovery);
             hooksInstalled += hook7DaMethod(cls7Da, "A0T", enableExtendedDiscovery);

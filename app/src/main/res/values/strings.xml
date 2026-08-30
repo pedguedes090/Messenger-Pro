@@ -61,6 +61,13 @@
     <string name="pref_default_camera_summary">Open system camera instead of Messenger\u2019s built-in camera</string>
     <string name="pref_disable_media_transcoder">Disable media transcoder</string>
     <string name="pref_disable_media_transcoder_summary">Send original quality media without re-encoding</string>
+    <string name="pref_category_privacy">Privacy</string>
+    <string name="pref_allow_screen_capture">Allow screen capture</string>
+    <string name="pref_allow_screen_capture_summary">Allow screenshots and screen recording in all conversations</string>
+    <string name="pref_block_screenshot_detection">Block screenshot detection</string>
+    <string name="pref_block_screenshot_detection_summary">Prevent notifying others when you take a screenshot</string>
+    <string name="pref_open_links_externally">Open links externally</string>
+    <string name="pref_open_links_externally_summary">Open links in the external browser instead of the in-app browser</string>
     <string name="last_message">Message</string>
     <string name="last_message_threadkey">Thread Key</string>
     <string name="last_message_description">The message content</string>

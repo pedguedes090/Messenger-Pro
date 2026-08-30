@@ -57,7 +57,7 @@ public class MailboxConnector {
         try {
             Object mbx = mailbox.get();
             if (mbx != null) {
-                Class<?> cls7Da = Class.forName("X.7Da", false, classLoader);
+                Class<?> cls7Da = Class.forName("X.6yx", false, classLoader);
                 Object found = findInstanceOfType(mbx, cls7Da, new HashSet<>(), 3);
                 if (found != null) {
                     set7Da(found);
@@ -147,7 +147,7 @@ public class MailboxConnector {
                         String threadKeyEncoded = "T_" + Base64.encodeToString(
                                 ("MESSENGER:fbid:" + threadKey).getBytes(), Base64.NO_WRAP);
                         Object[] params = new Object[paramTypes.length];
-                        params[0] = 71; // action code for text message
+                        params[0] = 74; // action code for text message (v576)
                         params[1] = mailbox.get();
                         params[2] = threadKeyEncoded;
                         params[3] = textMessage.content;
@@ -254,17 +254,17 @@ public class MailboxConnector {
     public void sendAttachment(MediaAttachment attachment, final long threadKey, final int delay, final String replyId) {
         logDiscovery("sendAttachment: file=" + attachment.path + " fileName=" + attachment.fileName + " threadKey=" + threadKey);
 
-        // Try calling 7Da.A0Q (sendFileAttachmentMessage) directly
+        // Try calling 6yx.A0O (sendFileAttachmentMessage) directly
         Object sdk7Da = captured7Da.get();
         if (sdk7Da != null) {
             try {
                 String threadKeyEncoded = "T_" + Base64.encodeToString(
                         ("MESSENGER:fbid:" + threadKey).getBytes(), Base64.NO_WRAP);
 
-                // Find A0Q method on the 7Da instance
+                // Find A0O method on the 6yx instance
                 Method a0qMethod = null;
                 for (Method m : sdk7Da.getClass().getDeclaredMethods()) {
-                    if (m.getName().equals("A0Q")) {
+                    if (m.getName().equals("A0O")) {
                         a0qMethod = m;
                         break;
                     }
@@ -274,7 +274,7 @@ public class MailboxConnector {
                     final Method sendFile = a0qMethod;
                     sendFile.setAccessible(true);
 
-                    // A0Q params: (FileOptParams, LoggingOption, Number, String, String, String, String, String)
+                    // A0O params: (MailboxSDKFileAttachmentMessageOptionalParams, LoggingOption, Number, String, String, String, String, String)
                     // 5 Strings: threadKeyEncoded, filePath, fileName, mimeType, caption
                     String mimeType = attachment.fileName != null && attachment.fileName.endsWith(".jpg")
                             ? "image/jpeg" : "application/octet-stream";
@@ -289,19 +289,19 @@ public class MailboxConnector {
                     final String finalMimeType = mimeType;
                     final String filePath = attachment.path.getAbsolutePath();
 
-                    logDiscovery("sendAttachment: calling 7Da.A0Q with threadKey=" + threadKeyEncoded
+                    logDiscovery("sendAttachment: calling 6yx.A0O with threadKey=" + threadKeyEncoded
                             + " path=" + filePath + " name=" + attachment.fileName + " mime=" + finalMimeType);
 
-                    // Call A0Q directly - it's a high-level coroutine method that handles its own threading
+                    // Call A0O directly - it's a high-level coroutine method that handles its own threading
                     // Do NOT wrap in preDispatch/nativeScheduleTask as that conflicts with internal coroutines
                     final String fName = attachment.fileName;
                     new Thread(() -> {
                         try {
                             Object result = sendFile.invoke(sdk7Da, null, null, null,
                                     threadKeyEncoded, filePath, fName, finalMimeType, null);
-                            logDiscovery("sendAttachment: 7Da.A0Q returned: " + result);
+                            logDiscovery("sendAttachment: 6yx.A0O returned: " + result);
                         } catch (Throwable t) {
-                            Logger.warn("sendAttachment: 7Da.A0Q failed, falling back: " + t.getMessage());
+                            Logger.warn("sendAttachment: 6yx.A0O failed, falling back: " + t.getMessage());
                             if (isDiscoveryDebugEnabled()) {
                                 Logger.error(t);
                                 if (t.getCause() != null) {
@@ -312,16 +312,16 @@ public class MailboxConnector {
                     }).start();
                     return;
                 } else {
-                    Logger.verbose("sendAttachment: A0Q method not found on 7Da");
+                    Logger.verbose("sendAttachment: A0O method not found on 6yx");
                 }
             } catch (Throwable t) {
-                Logger.warn("sendAttachment: 7Da approach failed, falling back: " + t.getMessage());
+                Logger.warn("sendAttachment: 6yx approach failed, falling back: " + t.getMessage());
                 if (isDiscoveryDebugEnabled()) {
                     Logger.error(t);
                 }
             }
         } else {
-            Logger.verbose("sendAttachment: no cached 7Da instance yet, falling back");
+            Logger.verbose("sendAttachment: no cached 6yx instance yet, falling back");
         }
 
         // Fallback: try old CoreJNI dispatch

@@ -67,6 +67,7 @@ public class HistoryMediaCaptureFeature extends Feature implements MessagesDispl
         }
 
         String senderUserKey = getSenderUserKey(message);
+        String senderName = message.getSenderName();
         boolean selfSender = isSelfSender(senderUserKey);
         long threadKey = getThreadKey(message, messagesCollection);
         if (threadKey <= 0) {
@@ -98,7 +99,7 @@ public class HistoryMediaCaptureFeature extends Feature implements MessagesDispl
         if (plainText != null && !plainText.trim().isEmpty() && !selfSender) {
             String fingerprint = buildFingerprint("txt", messageId, senderUserKey, threadKey, plainText);
             if (shouldCapture(fingerprint)) {
-                MessageHistoryStore.appendIncoming(plainText, messageId, senderUserKey, threadKey);
+                MessageHistoryStore.appendIncomingWithNames(gateway.getContext(), plainText, messageId, senderUserKey, senderName, threadKey, null);
             }
         }
 
@@ -114,7 +115,7 @@ public class HistoryMediaCaptureFeature extends Feature implements MessagesDispl
         if (!selfSender) {
             String fingerprint = buildFingerprint("url", messageId, senderUserKey, threadKey, mediaUrl);
             if (shouldCapture(fingerprint)) {
-                MessageHistoryStore.appendIncoming(mediaUrl, messageId, senderUserKey, threadKey);
+                MessageHistoryStore.appendIncoming(gateway.getContext(), mediaUrl, messageId, senderUserKey, threadKey);
             }
         }
     }

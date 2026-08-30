@@ -24,6 +24,30 @@
         android:key="mpro_conversation_lock"
         android:title="@string/pref_enable_conversation_lock"
         android:summary="@string/pref_enable_conversation_lock_summary" />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="mpro_message_history"
+        android:title="@string/pref_message_history"
+        android:summary="@string/pref_message_history_summary" />
+
+    <PreferenceCategory
+        android:key="category_privacy_key"
+        android:title="@string/pref_category_privacy"/>
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_allow_screen_capture"
+        android:title="@string/pref_allow_screen_capture"
+        android:summary="@string/pref_allow_screen_capture_summary" />
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_block_screenshot_detection"
+        android:title="@string/pref_block_screenshot_detection"
+        android:summary="@string/pref_block_screenshot_detection_summary" />
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mpro_open_links_externally"
+        android:title="@string/pref_open_links_externally"
+        android:summary="@string/pref_open_links_externally_summary" />
 
     <PreferenceCategory
         android:key="category_text_key"

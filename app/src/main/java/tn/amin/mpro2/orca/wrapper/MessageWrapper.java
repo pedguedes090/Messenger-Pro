@@ -64,6 +64,13 @@ public class MessageWrapper {
         return new ParticipantInfoWrapper(gateway, participantInfo).getUserKey();
     }
 
+    public String getSenderName() {
+        Object participantInfo = WrapperHelper.fieldGet(mParticipantInfoField, mObject.get());
+        if (participantInfo == null) return null;
+
+        return new ParticipantInfoWrapper(gateway, participantInfo).getName();
+    }
+
     public Object getRawObject() {
         return mObject.get();
     }

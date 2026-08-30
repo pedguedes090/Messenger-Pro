@@ -44,6 +44,13 @@
     <string name="pref_default_camera_summary">Mở camera hệ thống thay vì camera Messenger</string>
     <string name="pref_disable_media_transcoder">Tắt chuyển đổi media</string>
     <string name="pref_disable_media_transcoder_summary">Gửi media chất lượng gốc không qua mã hoá lại</string>
+    <string name="pref_category_privacy">Riêng tư</string>
+    <string name="pref_allow_screen_capture">Cho phép chụp màn hình</string>
+    <string name="pref_allow_screen_capture_summary">Cho phép chụp màn hình và quay màn hình trong mọi cuộc trò chuyện</string>
+    <string name="pref_block_screenshot_detection">Chặn phát hiện chụp màn hình</string>
+    <string name="pref_block_screenshot_detection_summary">Không thông báo cho người khác khi bạn chụp màn hình</string>
+    <string name="pref_open_links_externally">Mở liên kết bằng trình duyệt ngoài</string>
+    <string name="pref_open_links_externally_summary">Mở liên kết bằng trình duyệt ngoài thay vì trình duyệt trong ứng dụng</string>
     <string name="last_message">Tin nhắn</string>
     <string name="last_message_threadkey">Khoá cuộc trò chuyện</string>
     <string name="last_message_description">Nội dung tin nhắn</string>

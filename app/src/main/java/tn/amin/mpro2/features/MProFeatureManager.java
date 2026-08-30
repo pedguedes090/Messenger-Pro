@@ -2,9 +2,13 @@ package tn.amin.mpro2.features;
 
 import tn.amin.mpro2.features.action.AttachFileFeature;
 import tn.amin.mpro2.features.action.DownloadVideoFeature;
+import tn.amin.mpro2.features.state.AllowScreenCaptureFeature;
+import tn.amin.mpro2.features.state.BlockScreenshotDetectionFeature;
+import tn.amin.mpro2.features.state.OpenLinksExternallyFeature;
 import tn.amin.mpro2.features.action.ConversationLockFeature;
 import tn.amin.mpro2.features.action.CopyThreadKeyFeature;
 import tn.amin.mpro2.features.action.SettingsFeature;
+import tn.amin.mpro2.features.internal.HistoryMediaCaptureFeature;
 import tn.amin.mpro2.features.internal.ThreadKeyDetectorFeature;
 import tn.amin.mpro2.features.state.CommandsFeature;
 import tn.amin.mpro2.features.state.DefaultCameraFeature;
@@ -25,6 +29,7 @@ public class MProFeatureManager extends FeatureManager {
     public void initFeatures(OrcaGateway gateway) {
         // Internal features
         addFeature(new ThreadKeyDetectorFeature(gateway));
+        addFeature(new HistoryMediaCaptureFeature(gateway));
 
         // Action features
         addFeature(new AttachFileFeature(gateway));
@@ -41,6 +46,9 @@ public class MProFeatureManager extends FeatureManager {
         addFeature(new PresenceStealthFeature(gateway));
         addFeature(new DefaultCameraFeature(gateway));
         addFeature(new MediaTranscodeFeature(gateway));
+        addFeature(new AllowScreenCaptureFeature(gateway));
+        addFeature(new BlockScreenshotDetectionFeature(gateway));
+        addFeature(new OpenLinksExternallyFeature(gateway));
 
         // Tasker features
         addFeature(new TaskerEventTypingIndicatorFeature(gateway));

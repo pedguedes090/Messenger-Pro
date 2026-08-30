@@ -28,6 +28,12 @@
         android:summary="@string/pref_advanced_summary"
         android:icon="@android:drawable/ic_menu_preferences"/>
 
+    <Preference
+        android:title="@string/pref_chat_history"
+        android:key="mpro_root_history"
+        android:summary="@string/pref_chat_history_summary"
+        android:icon="@android:drawable/ic_menu_recent_history"/>
+
     <PreferenceCategory
         android:title="@string/settings_category_support" />
 

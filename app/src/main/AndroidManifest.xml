@@ -17,6 +17,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+        <provider
+            android:name=".messaging.history.HistoryProvider"
+            android:authorities="tn.amin.mpro2.history"
+            android:exported="true" />
+
         <activity
             android:name=".AboutActivity"
             android:exported="true"
@@ -91,7 +96,7 @@
             android:value="53" />
         <meta-data
             android:name="xposedscope"
-            android:value="com.facebook.orca" />
+            android:value="com.facebook.orca,com.facebook.katana" />
     </application>
 
 </manifest>
