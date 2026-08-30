@@ -54,7 +54,7 @@ jobs:
           curl -fsSL --retry 3 -o in/Facebook.apkm "$FACEBOOK_URL"
           curl -fsSL --retry 3 -o in/fb-dex.zip "$FB_DEX_URL"
           curl -fsSL --retry 3 -o in/MRVPatcher.jar "$MRVPATCHER_URL"
-          curl -fsSL --retry 3 -o in/ChatHeadEnabler.apk "$CHATHEAD_URL"
+          curl -fsSL --retry 3 -o in/ChatHeadEnabler-v2.4.7.apk "$CHATHEAD_URL"
           mkdir -p in/fb-dex
           unzip -o -q in/fb-dex.zip -d in/fb-dex/
 
@@ -62,6 +62,7 @@ jobs:
       - name: Patch Messenger
         run: |
           java -jar in/MRVPatcher.jar in/Messenger.apk -o out -f --modules tn.amin.mpro2
+          mv out/Messenger-mrv.apk out/Messenger-v576.0.0.47.92.apk
           ls -la out/
 
       # --- 4. patch Facebook (static seen/ads + merge + MRV) ---
@@ -73,6 +74,7 @@ jobs:
           export OUT_DIR="$PWD/out"
           export WORK="$PWD/work-fb"
           bash pipeline/fb/run.sh
+          mv out/final_unsigned-mrv.apk out/Facebook-v576.0.0.42.73.apk
           ls -la out/
 
       # --- 5. upload artifacts + create release ---
@@ -82,8 +84,9 @@ jobs:
           name: patched-apks
           path: |
             app/build/outputs/apk/debug/*.apk
-            out/*.apk
-            in/ChatHeadEnabler.apk
+            out/Messenger-v576*.apk
+            out/Facebook-v576*.apk
+            in/ChatHeadEnabler-v2.4.7.apk
 
       - name: Create GitHub Release and upload APKs
         if: startsWith(github.ref, 'refs/tags/')
@@ -91,6 +94,7 @@ jobs:
         with:
           files: |
             app/build/outputs/apk/debug/mPro-v*-debug.apk
-            out/*-mrv.apk
-            in/ChatHeadEnabler.apk
+            out/Messenger-v576*.apk
+            out/Facebook-v576*.apk
+            in/ChatHeadEnabler-v2.4.7.apk
           generate_release_notes: true
