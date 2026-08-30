@@ -1,0 +1,96 @@
+name: Patch & Release (Messenger + Facebook)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  # --- source APKs (hosted on HuggingFace) ---
+  MESSENGER_URL: https://huggingface.co/buckets/meetea/data/resolve/original/com.facebook.orca_576.0.0.47.92-345212652_minAPI28%28arm64-v8a%29%28nodpi%29_apkmirror.com.apk
+  FACEBOOK_URL: https://huggingface.co/buckets/meetea/data/resolve/original/com.facebook.katana_576.0.0.42.73-474227017_1dpi_ff384da02235462f96b29bfdb2c3f247_apkmirror.com.apkm
+  # 18 decompressed dex (superpack output) - see pipeline/PIPELINE.md (Phase 4)
+  FB_DEX_URL: https://huggingface.co/buckets/meetea/data/resolve/original/facebook-576-18dex.zip
+
+  # --- patching toolchain ---
+  MRVPATCHER_URL: https://github.com/NeonOrbit/MRVPatcher/releases/download/5.8.1/MRVPatcher-5.8.1.jar
+  CHATHEAD_URL: https://github.com/NeonOrbit/ChatHeadEnabler/releases/download/v2.4.7/ChatHeadEnabler-v2.4.7.apk
+
+jobs:
+  patch-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # --- 1. build the MessengerPro module ---
+      - name: Build module APK
+        run: ./gradlew assembleDebug
+
+      # --- 2. download inputs ---
+      - name: Download inputs
+        run: |
+          mkdir -p in out
+          curl -fsSL --retry 3 -o in/Messenger.apk "$MESSENGER_URL"
+          curl -fsSL --retry 3 -o in/Facebook.apkm "$FACEBOOK_URL"
+          curl -fsSL --retry 3 -o in/fb-dex.zip "$FB_DEX_URL"
+          curl -fsSL --retry 3 -o in/MRVPatcher.jar "$MRVPATCHER_URL"
+          curl -fsSL --retry 3 -o in/ChatHeadEnabler.apk "$CHATHEAD_URL"
+          mkdir -p in/fb-dex
+          unzip -o -q in/fb-dex.zip -d in/fb-dex/
+
+      # --- 3. patch Messenger (MRV inject tn.amin.mpro2) ---
+      - name: Patch Messenger
+        run: |
+          java -jar in/MRVPatcher.jar in/Messenger.apk -o out -f --modules tn.amin.mpro2
+          ls -la out/
+
+      # --- 4. patch Facebook (static seen/ads + merge + MRV) ---
+      - name: Patch Facebook
+        run: |
+          export FB_APKM="$PWD/in/Facebook.apkm"
+          export FB_DEXDIR="$PWD/in/fb-dex"
+          export MRV_JAR="$PWD/in/MRVPatcher.jar"
+          export OUT_DIR="$PWD/out"
+          export WORK="$PWD/work-fb"
+          bash pipeline/fb/run.sh
+          ls -la out/
+
+      # --- 5. upload artifacts + create release ---
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: patched-apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            out/*.apk
+            in/ChatHeadEnabler.apk
+
+      - name: Create GitHub Release and upload APKs
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/build/outputs/apk/debug/mPro-v*-debug.apk
+            out/*-mrv.apk
+            in/ChatHeadEnabler.apk
+          generate_release_notes: true
