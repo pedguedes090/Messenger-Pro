@@ -21,5 +21,6 @@ if [ ! -f "$LIB/ARSCLib.jar" ]; then
 fi
 
 javac -cp "$LIB/ARSCLib.jar" -d "$CLASSES" "$HERE/MergeApk.java"
-java -Xmx8g -cp "$LIB/ARSCLib.jar:$CLASSES" MergeApk "$DIR" "$OUT"
+HEAP="${JAVA_HEAP:-4g}"
+java -Xmx"$HEAP" -cp "$LIB/ARSCLib.jar:$CLASSES" MergeApk "$DIR" "$OUT"
 echo "wrote $OUT"
