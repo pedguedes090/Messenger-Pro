@@ -40,3 +40,14 @@ apkmess/*.apk
 
 ## Logs
 *.log
+
+## Pipeline artifacts (downloaded/compiled at build time)
+pipeline/fb/build/
+pipeline/fb/out/
+pipeline/**/lib/
+pipeline/**/classes/
+
+## Reverse-engineering workspace (local only)
+work/
+apkCheck/
+
