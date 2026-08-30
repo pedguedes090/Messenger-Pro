@@ -30,7 +30,7 @@ def src_for(n, dexdir, patched5):
         return patched5
     if n == 1:
         return os.path.join(dexdir, "classes.dex")
-    return os.path.join(dexdir, "classes{n}".format(n=n))
+    return os.path.join(dexdir, "classes{n}.dex".format(n=n))
 
 
 def main():
