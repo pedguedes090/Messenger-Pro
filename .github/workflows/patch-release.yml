@@ -73,6 +73,8 @@ jobs:
 
       # --- 4b. Facebook debug-signed (no MRV) ---
       - name: Patch Facebook (debug, no MRV)
+        env:
+          BUILD_TOOLS: /usr/local/lib/android/sdk/build-tools/36.0.0
         run: |
           export FB_APKM="$PWD/in/Facebook.apkm"
           export FB_DEXDIR="$PWD/in/fb-dex"
