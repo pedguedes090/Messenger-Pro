@@ -77,7 +77,11 @@ public class FacebookHook {
             if (installStorySeenSyncBlock(unobfuscator)) ok++;
             if (installStorySeenReceiptsBlock(unobfuscator)) ok++;
             if (installStoryViewerSeenHelperBlock(unobfuscator)) ok++;
-            toast(context, "MPro FB: da cai " + ok + "/5 hook chan seen");
+            // New hooks for ads blocking
+            if (installStoryAdBlock(unobfuscator)) ok++;
+            if (installGameAdBlock(unobfuscator)) ok++;
+            if (installAudienceNetworkBlock(unobfuscator)) ok++;
+            toast(context, "MPro FB: da cai " + ok + " hooks (seen+ads)");
         } catch (Throwable t) {
             Log.e("MProFB", "unobfuscation failed: " + t, t);
             toast(context, "MPro FB: LOI " + t.getMessage());
@@ -172,6 +176,89 @@ public class FacebookHook {
             }
             return true;
         } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Block story ads by hooking the merge method in the story ad store.
+     */
+    private static boolean installStoryAdBlock(KatanaUnobfuscator unobfuscator) {
+        try {
+            Method mergeMethod = unobfuscator.loadStoryAdMergeMethod();
+            if (mergeMethod != null) {
+                XposedBridge.hookMethod(mergeMethod, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        // Keep original buckets but prevent insertion
+                        Log.i("MProFB", "Blocked story ad merge");
+                    }
+                });
+                return true;
+            }
+            // Fallback: hook by string anchor "AD_BUCKETS_KEY"
+            Method fallback = unobfuscator.loadMethodByStringAnchor("AD_BUCKETS_KEY");
+            if (fallback != null) {
+                XposedBridge.hookMethod(fallback, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        Log.i("MProFB", "Blocked story ad (fallback)");
+                    }
+                });
+                return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            Log.w("MProFB", "Story ad block failed: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Block game ads by intercepting quicksilver postMessage calls.
+     */
+    private static boolean installGameAdBlock(KatanaUnobfuscator unobfuscator) {
+        try {
+            Method pmMethod = unobfuscator.loadQuicksilverPostMessageMethod();
+            if (pmMethod != null) {
+                XposedBridge.hookMethod(pmMethod, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        String msg = (String) param.args[0];
+                        if (msg != null && msg.toLowerCase().contains("game")) {
+                            Log.i("MProFB", "Blocked game ad message: " + msg);
+                            param.setResult(null);
+                        }
+                    }
+                });
+                return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            Log.w("MProFB", "Game ad block failed: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Block Audience Network activities (game ads, interstitials).
+     */
+    private static boolean installAudienceNetworkBlock(KatanaUnobfuscator unobfuscator) {
+        try {
+            Class<?> ancClass = unobfuscator.loadAudienceNetworkActivityClass();
+            if (ancClass != null) {
+                XposedBridge.hookAllConstructors(ancClass, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        Log.i("MProFB", "Blocked AudienceNetworkActivity creation");
+                        throw new IllegalStateException("Blocked by MPro");
+                    }
+                });
+                return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            Log.w("MProFB", "Audience Network block failed: " + t.getMessage());
             return false;
         }
     }

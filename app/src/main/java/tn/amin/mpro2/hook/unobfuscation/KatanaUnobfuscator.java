@@ -195,4 +195,93 @@ public class KatanaUnobfuscator {
         }
         return methodData.loadMethod(mClassLoader);
     }
+
+    /**
+     * Find the story ad bucket merge method.
+     * Anchor: stable string "IN_DISC_METADATA_KEY" used in FbStoryAdInDiscStoreImpl.
+     */
+    public Method loadStoryAdMergeMethod() {
+        ClassFilter classFilter = new ClassFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("IN_DISC_METADATA_KEY"))
+                .build();
+
+        MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("AD_BUCKETS_KEY"))
+                .build();
+
+        MethodData methodData = mDexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
+        if (methodData == null) {
+            Logger.error("KatanaUnobfuscator: story ad merge method not found");
+            return null;
+        }
+        return methodData.loadMethod(mClassLoader);
+    }
+
+    /**
+     * Find the story ad fetch method.
+     * Anchor: stable string "AdsPaginatingNetworkAdBucketFetcher" (class name survives in some contexts).
+     */
+    public Method loadStoryAdFetchMethod() {
+        ClassFilter classFilter = new ClassFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("AdsPaginatingNetworkAdBucketFetcher"))
+                .build();
+
+        MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReturnType("V")
+                .setParamSize(1)
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("fetchMoreAds"))
+                .build();
+
+        MethodData methodData = mDexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
+        if (methodData == null) {
+            Logger.error("KatanaUnobfuscator: story ad fetch method not found");
+            return null;
+        }
+        return methodData.loadMethod(mClassLoader);
+    }
+
+    /**
+     * Find the AudienceNetworkActivity class for blocking game ads.
+     */
+    public Class<?> loadAudienceNetworkActivityClass() {
+        ClassFilter classFilter = new ClassFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("com.facebook.ads.AudienceNetworkActivity"))
+                .build();
+
+        io.github.neonorbit.dexplore.result.ClassData classData =
+                mDexplore.findClass(DexFilter.MATCH_ALL, classFilter);
+        if (classData == null) {
+            Logger.error("KatanaUnobfuscator: AudienceNetworkActivity class not found");
+            return null;
+        }
+        return classData.loadClass(mClassLoader);
+    }
+
+    /**
+     * Find the Quicksilver postMessage method for game ad interception.
+     * Anchor: stable string "quicksilver" in the message type.
+     */
+    public Method loadQuicksilverPostMessageMethod() {
+        ClassFilter classFilter = new ClassFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("quicksilver"))
+                .build();
+
+        MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addMethodWithDetails().build())
+                .setReferenceFilter(pool -> pool.stringsContain("postMessage"))
+                .build();
+
+        MethodData methodData = mDexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
+        if (methodData == null) {
+            Logger.error("KatanaUnobfuscator: quicksilver postMessage method not found");
+            return null;
+        }
+        return methodData.loadMethod(mClassLoader);
+    }
 }
