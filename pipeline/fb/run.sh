@@ -69,10 +69,30 @@ python3 "$HERE/superpack/integrate_ads.py" \
   --story-dex "$WORK/classes_story_patched.dex" --game-dex "$WORK/classes_game_patched.dex" \
   --out "$WORK/final_unsigned.apk"
 
-# Publish the exact pre-MRV artifact. Its original appComponentFactory is preserved,
+# Android 11+ requires resources.arsc to be uncompressed and 4-byte aligned.
+# The ZIP rewrite above can shift its data offset, so align before publishing or MRV patching.
+ZIPALIGN_BIN="${ZIPALIGN:-}"
+if [ -z "$ZIPALIGN_BIN" ] && [ -n "${BUILD_TOOLS:-}" ] && [ -x "$BUILD_TOOLS/zipalign" ]; then
+  ZIPALIGN_BIN="$BUILD_TOOLS/zipalign"
+fi
+if [ -z "$ZIPALIGN_BIN" ] && [ -n "${ANDROID_HOME:-}" ]; then
+  ZIPALIGN_BIN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign 2>/dev/null | sort -V | tail -n 1)"
+fi
+if [ -z "$ZIPALIGN_BIN" ]; then
+  ZIPALIGN_BIN="$(command -v zipalign || true)"
+fi
+if [ -z "$ZIPALIGN_BIN" ] || [ ! -x "$ZIPALIGN_BIN" ]; then
+  echo "ERROR: zipalign not found; refusing to publish an Android 11-incompatible APK" >&2
+  exit 1
+fi
+"$ZIPALIGN_BIN" -f -p 4 "$WORK/final_unsigned.apk" "$WORK/final_aligned.apk"
+"$ZIPALIGN_BIN" -c -p 4 "$WORK/final_aligned.apk"
+mv "$WORK/final_aligned.apk" "$WORK/final_unsigned.apk"
+
+# Publish the exact aligned pre-MRV artifact. Its original appComponentFactory is preserved,
 # so users can patch it later with their own MRV installation/key.
 cp "$WORK/final_unsigned.apk" "$OUT_DIR/Facebook-576-clean.apk"
-echo "clean pre-MRV APK -> $OUT_DIR/Facebook-576-clean.apk"
+echo "clean aligned pre-MRV APK -> $OUT_DIR/Facebook-576-clean.apk"
 
 # 6. Sign: MRV (shared key with Messenger) or debug keystore
 if [ -n "${MRV_JAR:-}" ]; then
