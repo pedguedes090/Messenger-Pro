@@ -13,6 +13,7 @@ import org.jf.dexlib2.immutable.instruction.ImmutableInstruction11n;
 import org.jf.dexlib2.immutable.instruction.ImmutableInstruction11x;
 import org.jf.dexlib2.writer.io.FileDataStore;
 import org.jf.dexlib2.writer.pool.DexPool;
+import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +49,7 @@ public class PatchStoryAds {
             for (Instruction i : impl.getInstructions()) insns.add(i);
             insns.add(0, new ImmutableInstruction11n(Opcode.CONST_4, 0, 0));
             insns.add(1, new ImmutableInstruction11x(Opcode.RETURN, 0));
-            MethodImplementation nimpl = new ImmutableMethodImplementation(impl.getRegisterCount() + 2, insns, new ArrayList<org.jf.dexlib2.iface.TryBlock>(), null);
+            MethodImplementation nimpl = new ImmutableMethodImplementation(impl.getRegisterCount() + 2, ImmutableList.copyOf(insns), ImmutableList.of(), ImmutableList.of());
             return new ImmutableMethod(m.getDefiningClass(), mName, m.getParameters(), m.getReturnType(), m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), nimpl);
         }
         return m;
