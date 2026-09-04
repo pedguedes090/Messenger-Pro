@@ -8,8 +8,8 @@ android {
         applicationId "tn.amin.mpro2"
         minSdkVersion 26
         targetSdkVersion 35
-        versionCode 31
-        versionName "1.2.10"
+        versionCode 32
+        versionName "1.2.11"
 
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
