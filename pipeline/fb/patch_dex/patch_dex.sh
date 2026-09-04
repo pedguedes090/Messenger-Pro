@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Compile + run the dexlib2 static patchers for Facebook 576.
-# Usage: patch_dex.sh <seen|ads> <input.dex> <output.dex>
+# Usage: patch_dex.sh <seen|ads|story|game> <input.dex> <output.dex>
 set -euo pipefail
 
-KIND="${1:?usage: patch_dex.sh <seen|ads> <input.dex> <output.dex>}"
+KIND="${1:?usage: patch_dex.sh <seen|ads|story|game> <input.dex> <output.dex>}"
 INPUT="${2:?input.dex}"
 OUTPUT="${3:?output.dex}"
 
@@ -28,6 +28,8 @@ CP="$LIB/dexlib2-2.5.2.jar:$LIB/util-2.5.2.jar:$LIB/guava-27.1-android.jar:$LIB/
 
 MAIN=PatchDex
 [ "$KIND" = "ads" ] && MAIN=PatchAds
+[ "$KIND" = "story" ] && MAIN=PatchStoryAds
+[ "$KIND" = "game" ] && MAIN=PatchGameAds
 
 javac -cp "$CP" -d "$CLASSES" "$HERE/$MAIN.java"
 java -cp "$CP:$CLASSES" "$MAIN" "$INPUT" "$OUTPUT"

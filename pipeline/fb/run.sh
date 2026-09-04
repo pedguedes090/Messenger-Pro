@@ -40,26 +40,33 @@ bash "$HERE/patch_dex/patch_dex.sh" seen "$FB_DEXDIR/classes5.dex" "$WORK/classe
 echo "== [2/6] patch secondary-1.dex (block feed ads) =="
 bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes.dex" "$WORK/classes_ads_patched.dex"
 
-# 2. De-superpack: drop .spo, inject 18 secondary-N.dex (secondary-5 = seen-patched)
-echo "== [3/6] de-superpack base.apk =="
+echo "== [3/6] patch story ads (AD_BUCKETS/IN_DISC) =="
+bash "$HERE/patch_dex/patch_dex.sh" story "$FB_DEXDIR/classes.dex" "$WORK/classes_story_patched.dex"
+
+echo "== [4/6] patch game ads (quicksilver/AudienceNetwork) =="
+bash "$HERE/patch_dex/patch_dex.sh" game "$FB_DEXDIR/classes.dex" "$WORK/classes_game_patched.dex"
+
+# 5. De-superpack: drop .spo, inject 18 secondary-N.dex (secondary-5 = seen-patched)
+echo "== [5/6] de-superpack base.apk =="
 python3 "$HERE/superpack/desuper.py" \
   --base "$FB_BASE" --dexdir "$FB_DEXDIR" --patched5 "$WORK/classes5_patched.dex" \
   --out "$WORK/base_desuper.apk"
 
-# 3. Clear requiredSplitTypes so the single APK installs without its split
-echo "== [4/6] clear requiredSplitTypes =="
+# 6. Clear requiredSplitTypes so the single APK installs without its split
+echo "== [7/6] clear requiredSplitTypes =="
 python3 "$HERE/superpack/patch_manifest.py" \
   --apk "$WORK/base_desuper.apk" --out "$WORK/base_single_unsigned.apk"
 
-# 4. Binary resource merge (base + split) via ARSCLib
+# 6. Binary resource merge (base + split) via ARSCLib
 mkdir -p "$WORK/bundle"
 cp "$WORK/base_single_unsigned.apk" "$WORK/bundle/base.apk"
 cp "$FB_SPLIT" "$WORK/bundle/split_config.xxhdpi.apk"
 bash "$HERE/merge/merge.sh" "$WORK/bundle" "$WORK/merged.apk"
 
-# 5. Integrate ads-patched secondary-1.dex into the merged APK
+# 7. Integrate all patched dexes into the merged APK
 python3 "$HERE/superpack/integrate_ads.py" \
   --apk "$WORK/merged.apk" --ads-dex "$WORK/classes_ads_patched.dex" \
+  --story-dex "$WORK/classes_story_patched.dex" --game-dex "$WORK/classes_game_patched.dex" \
   --out "$WORK/final_unsigned.apk"
 
 # 6. Sign: MRV (shared key with Messenger) or debug keystore
