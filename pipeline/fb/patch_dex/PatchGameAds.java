@@ -27,23 +27,10 @@ public class PatchGameAds {
         int patched = 0;
         for (ClassDef cd : dex.getClasses()) {
             String classType = cd.getType();
-            boolean isTarget = false;
-            for (Method m : cd.getMethods()) {
-                if (m.getImplementation() != null) {
-                    for (Instruction i : m.getImplementation().getInstructions()) {
-                        String str = i.getCode() + "";
-                        if (str.contains("quicksilver") || str.contains("Quicksilver")) {
-                            isTarget = true; break;
-                        }
-                    }
-                }
-                if (isTarget) break;
-            }
-            if (classType.equals("Lcom/facebook/ads/AudienceNetworkActivity;") || classType.contains("AudienceNetwork")) {
-                isTarget = true;
-            }
+            boolean isTarget = classType.equals("Lcom/facebook/ads/AudienceNetworkActivity;") || classType.contains("AudienceNetwork");
             if (isTarget) {
-                List<Method> newDirect = new ArrayList<>(), newVirtual = new ArrayList<>();
+                List<Method> newDirect = new ArrayList<Method>();
+                List<Method> newVirtual = new ArrayList<Method>();
                 for (Method m : cd.getDirectMethods()) newDirect.add(patchMethod(m));
                 for (Method m : cd.getVirtualMethods()) newVirtual.add(patchMethod(m));
                 pool.internClass(new ImmutableClassDef(cd.getType(), cd.getAccessFlags(), cd.getSuperclass(), cd.getInterfaces(), cd.getSourceFile(), cd.getAnnotations(), cd.getStaticFields(), cd.getInstanceFields(), newDirect, newVirtual));
@@ -57,17 +44,20 @@ public class PatchGameAds {
         MethodImplementation impl = m.getImplementation();
         if (impl == null) return m;
         String mName = m.getName();
-        List<Instruction> insns = new ArrayList<>(impl.getInstructions());
+        List<Instruction> insns = new ArrayList<Instruction>();
+        for (Instruction i : impl.getInstructions()) insns.add(i);
         if (mName.equals("postMessage")) {
             insns.clear();
             insns.add(new ImmutableInstruction11x(Opcode.RETURN_VOID, 0));
-            return new ImmutableMethod(m.getDefiningClass(), mName, m.getParameters(), m.getReturnType(), m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), new ImmutableMethodImplementation(2, insns, new ArrayList<>(), null));
+            MethodImplementation nimpl = new ImmutableMethodImplementation(2, insns, new ArrayList<org.jf.dexlib2.iface.TryBlock>(), null);
+            return new ImmutableMethod(m.getDefiningClass(), mName, m.getParameters(), m.getReturnType(), m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), nimpl);
         }
         if (mName.equals("<init>") && m.getParameters().isEmpty()) {
             insns.clear();
             insns.add(new ImmutableInstruction11n(Opcode.CONST_4, 0, 1));
             insns.add(new ImmutableInstruction11x(Opcode.THROW, 0));
-            return new ImmutableMethod(m.getDefiningClass(), mName, m.getParameters(), m.getReturnType(), m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), new ImmutableMethodImplementation(2, insns, new ArrayList<>(), null));
+            MethodImplementation nimpl = new ImmutableMethodImplementation(2, insns, new ArrayList<org.jf.dexlib2.iface.TryBlock>(), null);
+            return new ImmutableMethod(m.getDefiningClass(), mName, m.getParameters(), m.getReturnType(), m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), nimpl);
         }
         return m;
     }

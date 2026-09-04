@@ -26,38 +26,29 @@ public class PatchStoryAds {
         DexPool pool = new DexPool(opcodes);
         int patched = 0;
         for (ClassDef cd : dex.getClasses()) {
-            boolean hasAdString = false;
-            for (Method m : cd.getMethods()) {
-                if (m.getImplementation() != null) {
-                    for (Instruction i : m.getImplementation().getInstructions()) {
-                        String str = i.getCode() + "";
-                        if (str.contains("AD_BUCKETS") || str.contains("IN_DISC") || str.contains("story_ad")) {
-                            hasAdString = true; break;
-                        }
-                    }
-                }
-                if (hasAdString) break;
-            }
-            if (hasAdString) {
-                List<Method> newDirect = new ArrayList<>(), newVirtual = new ArrayList<>();
-                for (Method m : cd.getDirectMethods()) newDirect.add(patchMethod(m));
-                for (Method m : cd.getVirtualMethods()) newVirtual.add(patchMethod(m));
-                pool.internClass(new ImmutableClassDef(cd.getType(), cd.getAccessFlags(), cd.getSuperclass(), cd.getInterfaces(), cd.getSourceFile(), cd.getAnnotations(), cd.getStaticFields(), cd.getInstanceFields(), newDirect, newVirtual));
-                patched++;
-            } else { pool.internClass(cd); }
+            List<Method> newDirect = new ArrayList<Method>();
+            List<Method> newVirtual = new ArrayList<Method>();
+            for (Method m : cd.getDirectMethods()) newDirect.add(patchMethod(m));
+            for (Method m : cd.getVirtualMethods()) newVirtual.add(patchMethod(m));
+            pool.internClass(new ImmutableClassDef(cd.getType(), cd.getAccessFlags(), cd.getSuperclass(), cd.getInterfaces(), cd.getSourceFile(), cd.getAnnotations(), cd.getStaticFields(), cd.getInstanceFields(), newDirect, newVirtual));
+            patched++;
         }
         pool.writeTo(new FileDataStore(out));
         System.out.println("Story ads patched classes: " + patched + " -> " + out);
     }
     static Method patchMethod(Method m) {
         MethodImplementation impl = m.getImplementation();
-        if (impl == null || impl.getInstructions().isEmpty()) return m;
+        if (impl == null) return m;
+        int insnCount = 0;
+        for (Instruction i : impl.getInstructions()) insnCount++;
+        if (insnCount == 0) return m;
         String mName = m.getName();
         if (mName.contains("fetch") || mName.contains("load") || mName.contains("get") || mName.contains("provide") || mName.contains("merge")) {
-            List<Instruction> insns = new ArrayList<>(impl.getInstructions());
+            List<Instruction> insns = new ArrayList<Instruction>();
+            for (Instruction i : impl.getInstructions()) insns.add(i);
             insns.add(0, new ImmutableInstruction11n(Opcode.CONST_4, 0, 0));
             insns.add(1, new ImmutableInstruction11x(Opcode.RETURN, 0));
-            MethodImplementation nimpl = new ImmutableMethodImplementation(impl.getRegisterCount() + 2, insns, new ArrayList<>(), null);
+            MethodImplementation nimpl = new ImmutableMethodImplementation(impl.getRegisterCount() + 2, insns, new ArrayList<org.jf.dexlib2.iface.TryBlock>(), null);
             return new ImmutableMethod(m.getDefiningClass(), mName, m.getParameters(), m.getReturnType(), m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), nimpl);
         }
         return m;
