@@ -35,6 +35,23 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Download Android build-tools
+        run: |
+          mkdir -p build-tools
+          curl -fsSL -o build-tools/tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -o -q build-tools/tools.zip -d build-tools/
+          mkdir -p build-tools/sdk
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$PATH:$PWD/build-tools/cmdline-tools/latest/bin"
+          sdkmanager --sdk_root=$PWD/build-tools/sdk "build-tools;36.0.0" 2>/dev/null || true
+          echo "BUILD_TOOLS=$PWD/build-tools/sdk/build-tools/36.0.0" >> $GITHUB_ENV
+
+      - name: Create debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -keypass android -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000 -storetype PKCS12 2>/dev/null || true
+          ls -la ~/.android/debug.keystore
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -73,14 +90,13 @@ jobs:
 
       # --- 4b. Facebook debug-signed (no MRV) ---
       - name: Patch Facebook (debug, no MRV)
-        env:
-          BUILD_TOOLS: /usr/local/lib/android/sdk/build-tools/36.0.0
         run: |
           export FB_APKM="$PWD/in/Facebook.apkm"
           export FB_DEXDIR="$PWD/in/fb-dex"
           unset MRV_JAR
           export OUT_DIR="$PWD/out-debug"
           export WORK="$PWD/work-fb-debug"
+          export BUILD_TOOLS="$PWD/build-tools/sdk/build-tools/36.0.0"
           mkdir -p "$OUT_DIR" "$WORK"
           bash pipeline/fb/run.sh
           mv "$OUT_DIR/Facebook-576-patched.apk" "$OUT_DIR/Facebook-576-local-debug.apk"
