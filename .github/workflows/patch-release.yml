@@ -71,25 +71,6 @@ jobs:
           bash pipeline/fb/run.sh
           mv out/final_unsigned-mrv.apk out/Facebook-v576.0.0.42.73.apk
 
-      # --- 4b. Facebook unsigned (for local debug sign) ---
-      - name: Patch Facebook (unsigned, no MRV)
-        run: |
-          export FB_APKM="$PWD/in/Facebook.apkm"
-          export FB_DEXDIR="$PWD/in/fb-dex"
-          unset MRV_JAR
-          export OUT_DIR="$PWD/out-debug"
-          export WORK="$PWD/work-fb-debug"
-          mkdir -p "$OUT_DIR" "$WORK"
-          # Override BUILD_TOOLS to skip signing
-          export BUILD_TOOLS="/usr/bin"
-          bash pipeline/fb/run.sh || true
-          # If signing failed, copy unsigned APK instead
-          if [ ! -f "$OUT_DIR/Facebook-576-patched.apk" ]; then
-            cp "$WORK/final_unsigned.apk" "$OUT_DIR/Facebook-576-local-debug.apk"
-          else
-            mv "$OUT_DIR/Facebook-576-patched.apk" "$OUT_DIR/Facebook-576-local-debug.apk"
-          fi
-
       # --- 5. upload artifacts ---
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -99,7 +80,7 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             out/Messenger-v576*.apk
             out/Facebook-v576*.apk
-            out-debug/Facebook-576-local-debug.apk
+            out/Facebook-576-clean.apk
             in/ChatHeadEnabler-v2.4.7.apk
 
       # --- 6. create release on tag ---
@@ -111,6 +92,6 @@ jobs:
             app/build/outputs/apk/debug/mPro-v*-debug.apk
             out/Messenger-v576*.apk
             out/Facebook-v576*.apk
-            out-debug/Facebook-576-local-debug.apk
+            out/Facebook-576-clean.apk
             in/ChatHeadEnabler-v2.4.7.apk
           generate_release_notes: true

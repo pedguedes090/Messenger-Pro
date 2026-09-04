@@ -69,6 +69,11 @@ python3 "$HERE/superpack/integrate_ads.py" \
   --story-dex "$WORK/classes_story_patched.dex" --game-dex "$WORK/classes_game_patched.dex" \
   --out "$WORK/final_unsigned.apk"
 
+# Publish the exact pre-MRV artifact. Its original appComponentFactory is preserved,
+# so users can patch it later with their own MRV installation/key.
+cp "$WORK/final_unsigned.apk" "$OUT_DIR/Facebook-576-clean.apk"
+echo "clean pre-MRV APK -> $OUT_DIR/Facebook-576-clean.apk"
+
 # 6. Sign: MRV (shared key with Messenger) or debug keystore
 if [ -n "${MRV_JAR:-}" ]; then
   echo "== [6/6] MRV patch + sign =="
