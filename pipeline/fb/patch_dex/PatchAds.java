@@ -165,6 +165,14 @@ public class PatchAds {
                 && m.getReturnType().equals("Z") && m.getParameters().size() == 1) {
             return replaceWithFalse(m);
         }
+        // FeedSponsoredStoryHolder.getTopValidAd: the sponsored story selector
+        // used by feed/video surfaces. Returning no edge lets the organic path
+        // continue instead of vending the selected sponsored edge.
+        if (type.equals("LX/21f;") && m.getName().equals("A0R")
+                && m.getReturnType().equals("Lcom/facebook/graphql/model/GraphQLFeedUnitEdge;")
+                && m.getParameters().isEmpty()) {
+            return replaceWithNull(m);
+        }
         if (type.equals("Lcom/facebook/graphql/model/GraphQLFBMultiAdsFeedUnit;")
                 && m.getName().equals("A00") && !m.getReturnType().equals("V")) {
             return replaceWithNull(m);
@@ -179,6 +187,11 @@ public class PatchAds {
         }
         if (type.equals("LX/OJB;") && m.getName().equals("A03")
                 && m.getReturnType().equals("V") && m.getParameters().size() == 16) {
+            return replaceWithVoid(m);
+        }
+        // VideoHomeDataFetcher.fetchAds: sponsored video/reels feed request.
+        if (type.equals("LX/6F5;") && m.getName().equals("Av8")
+                && m.getReturnType().equals("V") && m.getParameters().size() == 1) {
             return replaceWithVoid(m);
         }
         return m;

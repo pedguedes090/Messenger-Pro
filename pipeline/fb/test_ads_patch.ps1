@@ -20,7 +20,7 @@ function Convert-ToMsysPath([string]$path) {
     return $p
 }
 
-function Invoke-Patch([string]$name) {
+function Invoke-Patch([string]$name, [int]$expectedPatchedMethods) {
     $input = Join-Path $DexRoot $name
     $output = Join-Path $OutputRoot ($name -replace '\.dex$', '.patched.dex')
     $cmd = "'$(Convert-ToMsysPath $patcher)' ads '$(Convert-ToMsysPath $input)' '$(Convert-ToMsysPath $output)'"
@@ -30,10 +30,14 @@ function Invoke-Patch([string]$name) {
     if ($text -notmatch 'patched methods: [1-9][0-9]*') {
         throw "no target method patched in $name`n$text"
     }
+    $match = [regex]::Match($text, 'patched methods: (\d+)')
+    if (-not $match.Success -or [int]$match.Groups[1].Value -ne $expectedPatchedMethods) {
+        throw "unexpected patch count for $name; expected $expectedPatchedMethods`n$text"
+    }
     Write-Output "$name`n$text"
 }
 
-Invoke-Patch 'classes.dex'
-Invoke-Patch 'classes3.dex'
-Invoke-Patch 'classes10.dex'
+Invoke-Patch 'classes.dex' 7
+Invoke-Patch 'classes3.dex' 2
+Invoke-Patch 'classes10.dex' 2
 Write-Output 'ADS_PATCH_TEST=PASS'
