@@ -22,6 +22,7 @@ Usage:
   python3 desuper.py --base base.apk --dexdir dex/ --out base_desuper.apk \
       [--patched1 classes_patched.dex] [--patched3 classes3_patched.dex]
       [--patched5 classes5_patched.dex] [--patched10 classes10_patched.dex]
+      [--patched16 classes16_patched.dex]
 """
 import argparse, hashlib, os, zipfile
 
@@ -47,9 +48,12 @@ def main():
                     help="optional seen-patched secondary-5.dex")
     ap.add_argument("--patched10", default=None,
                     help="optional patched secondary-10.dex (video/Reels ads)")
+    ap.add_argument("--patched16", default=None,
+                    help="optional patched secondary-16.dex (additional sponsored stories)")
     args = ap.parse_args()
 
-    patches = {1: args.patched1, 3: args.patched3, 5: args.patched5, 10: args.patched10}
+    patches = {1: args.patched1, 3: args.patched3, 5: args.patched5,
+               10: args.patched10, 16: args.patched16}
 
     dex_meta = []
     for n in range(1, 19):

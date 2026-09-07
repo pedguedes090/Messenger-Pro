@@ -37,7 +37,8 @@ function Invoke-Patch([string]$name, [int]$expectedPatchedMethods) {
     Write-Output "$name`n$text"
 }
 
-Invoke-Patch 'classes.dex' 7
-Invoke-Patch 'classes3.dex' 2
+Invoke-Patch 'classes.dex' 8
+Invoke-Patch 'classes3.dex' 3
 Invoke-Patch 'classes10.dex' 2
+Invoke-Patch 'classes16.dex' 1
 Write-Output 'ADS_PATCH_TEST=PASS'

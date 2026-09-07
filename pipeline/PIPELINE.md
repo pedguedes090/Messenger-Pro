@@ -87,7 +87,9 @@ Steps performed by `run.sh`:
    (PROMOTION), `A0C` (FRIENDLY_FEED_PROMOTION), and `A0D`
    (HIGH_VALUE_PROMOTION); `LX/3Le;.Di7(...)->ImmutableList` returns an empty
    list; `LX/3Le;.A0D(...)->LX/6mV;` returns null; `LX/1mb;.A09(...)->V`
-   returns immediately; and `GraphQLFBMultiAdsFeedUnit.A00()` returns null.
+   returns immediately; `GraphQLFBMultiAdsFeedUnit.A00()` returns null;
+   `FeedSponsoredStoryHolder.A0R()` returns null; and the FBShorts/VideoHome
+   sponsored-pool/fetch paths return before vending or requesting an ad.
 3. **Patch async runnable** - patch the class carrying the verified
    `__redex_internal_original_name` anchor
    `MainFeedCSRDataLoaderImpl$maybeDoAsyncAdsTailLoad$1` in `secondary-3.dex`.
@@ -95,7 +97,7 @@ Steps performed by `run.sh`:
    `LX/OJB;.A03(...)->V` in `secondary-10.dex` so video-ad-break and
    banner/video ad fetches return before requesting ads.
 5. **De-superpack** - drop `store-0.dex.spo`, rewrite `metadata.txt`, inject
-   the 18 `secondary-N.dex` assets (secondary-1/3/5/10 contain the patched
+   the 18 `secondary-N.dex` assets (secondary-1/3/5/10/16 contain the patched
    variants). Mapping:
    `secondary-1 <- classes.dex`, `secondary-N <- classesN.dex` (N = 2..18).
 6. **Clear split requirement** - empty the `requiredSplitTypes=base__density`
@@ -116,9 +118,11 @@ guava 27.1-android, jsr305 3.0.2 (Maven Central); ARSCLib V1.4.0 (JitPack).
 ### Patch anchors (verified on 576)
 
 - **Seen**: `LX/BII;.A00` - `secondary-5.dex` (`classes5.dex`, 10,057,776 B).
-- **Ads**: the verified `LX/1lJ;`, `LX/3Le;`, `LX/1mb;`, `LX/OF5;`, and
-  `LX/OJB;` seams from `ADS_BLOCK_576_REPORT.md`. They are patched in
-  `secondary-1.dex`, `secondary-3.dex`, and `secondary-10.dex`, and the
+- **Ads**: the verified `LX/1lJ;`, `LX/3Le;`, `LX/1mb;`, `LX/OF5;`,
+  `LX/OJB;`, `LX/21f;`, `LX/4r3;`, `LX/6F5;`, `LX/1kU;`, and `LX/iR6;`
+  seams from `ADS_BLOCK_576_REPORT.md` plus the follow-up DEX map. They are
+  patched in `secondary-1.dex`, `secondary-3.dex`, `secondary-10.dex`, and
+  `secondary-16.dex`, and the
   `metadata.txt` SHA-1 is regenerated for every replacement.
 - **Register layout**: for instance methods with `regs > insSize`, parameters
   live in the HIGH register group (`v[regs-insSize] .. v[regs-1]`); e.g.

@@ -173,6 +173,13 @@ public class PatchAds {
                 && m.getParameters().isEmpty()) {
             return replaceWithNull(m);
         }
+        // FBShortsSponsoredPool: interface implementation that vends the next
+        // sponsored short from the pool. Returning no item covers cached/prefetched
+        // sponsored shorts that bypass VideoHomeDataFetcher.fetchAds.
+        if (type.equals("LX/4r3;") && m.getName().equals("A0I")
+                && m.getReturnType().equals("LX/6Za;") && m.getParameters().size() == 4) {
+            return replaceWithNull(m);
+        }
         if (type.equals("Lcom/facebook/graphql/model/GraphQLFBMultiAdsFeedUnit;")
                 && m.getName().equals("A00") && !m.getReturnType().equals("V")) {
             return replaceWithNull(m);
@@ -192,6 +199,18 @@ public class PatchAds {
         // VideoHomeDataFetcher.fetchAds: sponsored video/reels feed request.
         if (type.equals("LX/6F5;") && m.getName().equals("Av8")
                 && m.getReturnType().equals("V") && m.getParameters().size() == 1) {
+            return replaceWithVoid(m);
+        }
+        // FeedNetworkController.doAdChannelNetworkRequest: dedicated feed ad
+        // channel request that can repopulate the sponsored-story pool.
+        if (type.equals("LX/1kU;") && m.getName().equals("Af0")
+                && m.getReturnType().equals("V") && m.getParameters().size() == 2) {
+            return replaceWithVoid(m);
+        }
+        // AdsChannelNetworkHandlerHelper.doFetchAdditionalSponsoredStoriesFromNetwork:
+        // secondary sponsored-story replenishment path.
+        if (type.equals("LX/iR6;") && m.getName().equals("A01")
+                && m.getReturnType().equals("V") && m.getParameters().size() == 4) {
             return replaceWithVoid(m);
         }
         return m;

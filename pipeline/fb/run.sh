@@ -34,8 +34,9 @@ FB_SPLIT="${FB_SPLIT:?set FB_SPLIT (or FB_APKM)}"
 FB_DEXDIR="${FB_DEXDIR:?set FB_DEXDIR to the 18-dex directory}"
 
 # 1. Static dex patches. Each route is patched in the DEX where the 576 map
-# places it: feed/async ads in secondary-1, the redex runnable in secondary-3,
-# story-seen in secondary-5, and video/Reels ads in secondary-10.
+# places it: feed/async/VideoHome ads in secondary-1/3, story-seen in
+# secondary-5, video/Reels ads in secondary-10, and additional sponsored-story
+# replenishment in secondary-16.
 echo "== [1/6] patch secondary-1.dex (feed + async feed ads) =="
 bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes.dex" "$WORK/classes1_ads_patched.dex"
 
@@ -48,18 +49,22 @@ bash "$HERE/patch_dex/patch_dex.sh" seen "$FB_DEXDIR/classes5.dex" "$WORK/classe
 echo "== [4/6] patch secondary-10.dex (video/Reels ad fetch) =="
 bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes10.dex" "$WORK/classes10_ads_patched.dex"
 
-# 5. De-superpack: drop .spo, inject 18 secondary-N.dex with all patches.
-echo "== [5/6] de-superpack base.apk =="
+echo "== [5/7] patch secondary-16.dex (additional sponsored-story fetch) =="
+bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes16.dex" "$WORK/classes16_ads_patched.dex"
+
+# 6. De-superpack: drop .spo, inject 18 secondary-N.dex with all patches.
+echo "== [6/7] de-superpack base.apk =="
 python3 "$HERE/superpack/desuper.py" \
   --base "$FB_BASE" --dexdir "$FB_DEXDIR" \
   --patched1 "$WORK/classes1_ads_patched.dex" \
   --patched3 "$WORK/classes3_ads_patched.dex" \
   --patched5 "$WORK/classes5_patched.dex" \
   --patched10 "$WORK/classes10_ads_patched.dex" \
+  --patched16 "$WORK/classes16_ads_patched.dex" \
   --out "$WORK/base_desuper.apk"
 
-# 6. Clear requiredSplitTypes so the single APK installs without its split
-echo "== [7/6] clear requiredSplitTypes =="
+# 7. Clear requiredSplitTypes so the single APK installs without its split
+echo "== [7/7] clear requiredSplitTypes =="
 python3 "$HERE/superpack/patch_manifest.py" \
   --apk "$WORK/base_desuper.apk" --out "$WORK/base_single_unsigned.apk"
 
