@@ -33,23 +33,29 @@ FB_BASE="${FB_BASE:?set FB_BASE (or FB_APKM)}"
 FB_SPLIT="${FB_SPLIT:?set FB_SPLIT (or FB_APKM)}"
 FB_DEXDIR="${FB_DEXDIR:?set FB_DEXDIR to the 18-dex directory}"
 
-# 1. Static dex patches
-echo "== [1/6] patch secondary-5.dex (block story-seen) =="
+# 1. Static dex patches. Each route is patched in the DEX where the 576 map
+# places it: feed/async ads in secondary-1, the redex runnable in secondary-3,
+# story-seen in secondary-5, and video/Reels ads in secondary-10.
+echo "== [1/6] patch secondary-1.dex (feed + async feed ads) =="
+bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes.dex" "$WORK/classes1_ads_patched.dex"
+
+echo "== [2/6] patch secondary-3.dex (async-ads runnable) =="
+bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes3.dex" "$WORK/classes3_ads_patched.dex"
+
+echo "== [3/6] patch secondary-5.dex (block story-seen) =="
 bash "$HERE/patch_dex/patch_dex.sh" seen "$FB_DEXDIR/classes5.dex" "$WORK/classes5_patched.dex"
 
-echo "== [2/6] patch secondary-1.dex (block feed ads) =="
-bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes.dex" "$WORK/classes_ads_patched.dex"
+echo "== [4/6] patch secondary-10.dex (video/Reels ad fetch) =="
+bash "$HERE/patch_dex/patch_dex.sh" ads "$FB_DEXDIR/classes10.dex" "$WORK/classes10_ads_patched.dex"
 
-echo "== [3/6] patch story ads (AD_BUCKETS/IN_DISC) =="
-bash "$HERE/patch_dex/patch_dex.sh" story "$FB_DEXDIR/classes.dex" "$WORK/classes_story_patched.dex"
-
-echo "== [4/6] patch game ads (quicksilver/AudienceNetwork) =="
-bash "$HERE/patch_dex/patch_dex.sh" game "$FB_DEXDIR/classes.dex" "$WORK/classes_game_patched.dex"
-
-# 5. De-superpack: drop .spo, inject 18 secondary-N.dex (secondary-5 = seen-patched)
+# 5. De-superpack: drop .spo, inject 18 secondary-N.dex with all patches.
 echo "== [5/6] de-superpack base.apk =="
 python3 "$HERE/superpack/desuper.py" \
-  --base "$FB_BASE" --dexdir "$FB_DEXDIR" --patched5 "$WORK/classes5_patched.dex" \
+  --base "$FB_BASE" --dexdir "$FB_DEXDIR" \
+  --patched1 "$WORK/classes1_ads_patched.dex" \
+  --patched3 "$WORK/classes3_ads_patched.dex" \
+  --patched5 "$WORK/classes5_patched.dex" \
+  --patched10 "$WORK/classes10_ads_patched.dex" \
   --out "$WORK/base_desuper.apk"
 
 # 6. Clear requiredSplitTypes so the single APK installs without its split
@@ -63,11 +69,10 @@ cp "$WORK/base_single_unsigned.apk" "$WORK/bundle/base.apk"
 cp "$FB_SPLIT" "$WORK/bundle/split_config.xxhdpi.apk"
 bash "$HERE/merge/merge.sh" "$WORK/bundle" "$WORK/merged.apk"
 
-# 7. Integrate all patched dexes into the merged APK
-python3 "$HERE/superpack/integrate_ads.py" \
-  --apk "$WORK/merged.apk" --ads-dex "$WORK/classes_ads_patched.dex" \
-  --story-dex "$WORK/classes_story_patched.dex" --game-dex "$WORK/classes_game_patched.dex" \
-  --out "$WORK/final_unsigned.apk"
+# The merged APK already contains the patched secondary-N.dex assets injected
+# above. Keep a direct copy as the final unsigned artifact so metadata hashes
+# and the DEX bytes remain exactly the ones tested before the resource merge.
+cp "$WORK/merged.apk" "$WORK/final_unsigned.apk"
 
 # Android 11+ requires resources.arsc to be uncompressed and 4-byte aligned.
 # The ZIP rewrite above can shift its data offset, so align before publishing or MRV patching.
@@ -106,8 +111,16 @@ else
   KS_PASS="${KS_PASS:-android}"
   KEY_ALIAS="${KEY_ALIAS:-androiddebugkey}"
   KEY_PASS="${KEY_PASS:-android}"
+  APKSIGNER_BIN="${APKSIGNER:-$BT/apksigner}"
+  if [ ! -f "$APKSIGNER_BIN" ] && [ -f "$BT/apksigner.bat" ]; then
+    APKSIGNER_BIN="$BT/apksigner.bat"
+  fi
+  if [ ! -f "$APKSIGNER_BIN" ]; then
+    echo "ERROR: apksigner not found under $BT" >&2
+    exit 1
+  fi
   "$BT/zipalign" -f -p 4 "$WORK/final_unsigned.apk" "$WORK/final_aligned.apk"
-  "$BT/apksigner" sign \
+  "$APKSIGNER_BIN" sign \
     --ks "$KS" --ks-pass "pass:$KS_PASS" \
     --ks-key-alias "$KEY_ALIAS" --key-pass "pass:$KEY_PASS" \
     --out "$OUT_DIR/Facebook-576-patched.apk" "$WORK/final_aligned.apk"

@@ -20,14 +20,15 @@ secondary-N <- classesN.dex (N = 2..18).
 
 Usage:
   python3 desuper.py --base base.apk --dexdir dex/ --out base_desuper.apk \
-      [--patched5 classes5_patched.dex]
+      [--patched1 classes_patched.dex] [--patched3 classes3_patched.dex]
+      [--patched5 classes5_patched.dex] [--patched10 classes10_patched.dex]
 """
 import argparse, hashlib, os, zipfile
 
 
-def src_for(n, dexdir, patched5):
-    if n == 5 and patched5:
-        return patched5
+def src_for(n, dexdir, patches):
+    if n in patches and patches[n]:
+        return patches[n]
     if n == 1:
         return os.path.join(dexdir, "classes.dex")
     return os.path.join(dexdir, "classes{n}.dex".format(n=n))
@@ -38,13 +39,21 @@ def main():
     ap.add_argument("--base", required=True)
     ap.add_argument("--dexdir", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--patched1", default=None,
+                    help="optional patched secondary-1.dex (feed + async ads)")
+    ap.add_argument("--patched3", default=None,
+                    help="optional patched secondary-3.dex (async-ads runnable)")
     ap.add_argument("--patched5", default=None,
                     help="optional seen-patched secondary-5.dex")
+    ap.add_argument("--patched10", default=None,
+                    help="optional patched secondary-10.dex (video/Reels ads)")
     args = ap.parse_args()
+
+    patches = {1: args.patched1, 3: args.patched3, 5: args.patched5, 10: args.patched10}
 
     dex_meta = []
     for n in range(1, 19):
-        p = src_for(n, args.dexdir, args.patched5)
+        p = src_for(n, args.dexdir, patches)
         if not os.path.exists(p):
             raise SystemExit("missing dex: " + p)
         b = open(p, "rb").read()

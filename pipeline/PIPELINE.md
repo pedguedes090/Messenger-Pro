@@ -41,7 +41,7 @@ pipeline/
     run.sh             # end-to-end Facebook patch driver
     patch_dex/
       PatchDex.java    # no-op LX/BII;.A00  (block story-seen)
-      PatchAds.java    # feed-filter addNewEdgeToCollection (block ads)
+      PatchAds.java    # verified 576 feed/async/video/Reels ad seams
       patch_dex.sh     # compile + run the dexlib2 patchers
     superpack/
       desuper.py       # strip .spo superpack, inject 18 secondary-N.dex
@@ -82,22 +82,29 @@ Steps performed by `run.sh`:
 
 1. **Patch story-seen** - no-op `LX/BII;.A00` (void, 8 params) in
    `secondary-5.dex` (the method Facebook calls to persist story-seen).
-2. **Patch feed ads** - prefix `LX/1lJ;.addNewEdgeToCollection(...)->Z` in
-   `secondary-1.dex` (= `classes.dex`) to return false when the feed edge
-   category is one of `A0K` (SPONSORED), `A0I` (PROMOTION),
-   `A0C` (FRIENDLY_FEED_PROMOTION), `A0D` (HIGH_VALUE_PROMOTION).
-3. **De-superpack** - drop `store-0.dex.spo`, rewrite `metadata.txt`, inject
-   the 18 `secondary-N.dex` assets (secondary-5 = seen-patched). Mapping:
+2. **Patch feed + async-feed ads** - patch `secondary-1.dex` (`classes.dex`):
+   `LX/1lJ;.addNewEdgeToCollection(...)->Z` drops `A0K` (SPONSORED), `A0I`
+   (PROMOTION), `A0C` (FRIENDLY_FEED_PROMOTION), and `A0D`
+   (HIGH_VALUE_PROMOTION); `LX/3Le;.Di7(...)->ImmutableList` returns an empty
+   list; `LX/3Le;.A0D(...)->LX/6mV;` returns null; `LX/1mb;.A09(...)->V`
+   returns immediately; and `GraphQLFBMultiAdsFeedUnit.A00()` returns null.
+3. **Patch async runnable** - patch the class carrying the verified
+   `__redex_internal_original_name` anchor
+   `MainFeedCSRDataLoaderImpl$maybeDoAsyncAdsTailLoad$1` in `secondary-3.dex`.
+4. **Patch video/Reels ads** - patch `LX/OF5;.A05(...)->V` and
+   `LX/OJB;.A03(...)->V` in `secondary-10.dex` so video-ad-break and
+   banner/video ad fetches return before requesting ads.
+5. **De-superpack** - drop `store-0.dex.spo`, rewrite `metadata.txt`, inject
+   the 18 `secondary-N.dex` assets (secondary-1/3/5/10 contain the patched
+   variants). Mapping:
    `secondary-1 <- classes.dex`, `secondary-N <- classesN.dex` (N = 2..18).
-4. **Clear split requirement** - empty the `requiredSplitTypes=base__density`
+6. **Clear split requirement** - empty the `requiredSplitTypes=base__density`
    string in the binary `AndroidManifest.xml` so the single APK installs
    without `INSTALL_FAILED_MISSING_SPLIT`.
-5. **Merge splits** - binary `resources.arsc` merge (base + xxhdpi) via
+7. **Merge splits** - binary `resources.arsc` merge (base + xxhdpi) via
    REAndroid ARSCLib. apktool/aapt2 cannot recompile Facebook obfuscated
    resources, so ARSCLib merges the compiled tables directly.
-6. **Integrate ads dex** - swap the ads-patched `secondary-1.dex` back in and
-   refresh its SHA-1.
-7. **MRV patch + sign** - `java -jar MRVPatcher-5.8.1.jar merged.apk -p -o out -f`
+8. **MRV patch + sign** - `java -jar MRVPatcher-5.8.1.jar merged.apk -p -o out -f`
    (VERIFIED: injects the LSPatch loader with empty `exModules` and re-signs
    with the fixed MRV key, so Facebook shares Messenger's signature). Output
    matches the hand-patched Facebook in release v1.2.9 byte-for-byte in
@@ -109,11 +116,10 @@ guava 27.1-android, jsr305 3.0.2 (Maven Central); ARSCLib V1.4.0 (JitPack).
 ### Patch anchors (verified on 576)
 
 - **Seen**: `LX/BII;.A00` - `secondary-5.dex` (`classes5.dex`, 10,057,776 B).
-- **Ads**: `LX/1lJ;.addNewEdgeToCollection(ImmutableList$Builder,
-  GraphQLFeedUnitEdge, LX/1et;)->Z` - `secondary-1.dex` (`classes.dex`,
-  12,121,152 B). Uses `GraphQLFeedUnitEdge.B9B()` to read the edge category,
-  then compares against `GraphQLFeedStoryCategory` enum fields
-  `A0K/A0I/A0C/A0D`.
+- **Ads**: the verified `LX/1lJ;`, `LX/3Le;`, `LX/1mb;`, `LX/OF5;`, and
+  `LX/OJB;` seams from `ADS_BLOCK_576_REPORT.md`. They are patched in
+  `secondary-1.dex`, `secondary-3.dex`, and `secondary-10.dex`, and the
+  `metadata.txt` SHA-1 is regenerated for every replacement.
 - **Register layout**: for instance methods with `regs > insSize`, parameters
   live in the HIGH register group (`v[regs-insSize] .. v[regs-1]`); e.g.
   `addNewEdgeToCollection` regs=30/insSize=4 => v26=this, v27=builder,

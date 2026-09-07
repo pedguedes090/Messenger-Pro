@@ -5,25 +5,28 @@ import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.iface.Method;
 import org.jf.dexlib2.iface.MethodImplementation;
+import org.jf.dexlib2.iface.Field;
 import org.jf.dexlib2.iface.instruction.Instruction;
-import org.jf.dexlib2.iface.TryBlock;
 import org.jf.dexlib2.iface.ExceptionHandler;
-import org.jf.dexlib2.iface.reference.MethodReference;
+import org.jf.dexlib2.iface.TryBlock;
 import org.jf.dexlib2.iface.reference.FieldReference;
+import org.jf.dexlib2.iface.reference.MethodReference;
+import org.jf.dexlib2.iface.value.StringEncodedValue;
 import org.jf.dexlib2.immutable.ImmutableClassDef;
+import org.jf.dexlib2.immutable.ImmutableExceptionHandler;
 import org.jf.dexlib2.immutable.ImmutableMethod;
 import org.jf.dexlib2.immutable.ImmutableMethodImplementation;
 import org.jf.dexlib2.immutable.ImmutableTryBlock;
-import org.jf.dexlib2.immutable.ImmutableExceptionHandler;
 import org.jf.dexlib2.immutable.instruction.ImmutableInstruction10t;
-import org.jf.dexlib2.immutable.instruction.ImmutableInstruction11x;
+import org.jf.dexlib2.immutable.instruction.ImmutableInstruction10x;
 import org.jf.dexlib2.immutable.instruction.ImmutableInstruction11n;
+import org.jf.dexlib2.immutable.instruction.ImmutableInstruction11x;
 import org.jf.dexlib2.immutable.instruction.ImmutableInstruction21c;
 import org.jf.dexlib2.immutable.instruction.ImmutableInstruction22t;
-import org.jf.dexlib2.immutable.instruction.ImmutableInstruction3rc;
 import org.jf.dexlib2.immutable.instruction.ImmutableInstruction35c;
-import org.jf.dexlib2.immutable.reference.ImmutableMethodReference;
+import org.jf.dexlib2.immutable.instruction.ImmutableInstruction3rc;
 import org.jf.dexlib2.immutable.reference.ImmutableFieldReference;
+import org.jf.dexlib2.immutable.reference.ImmutableMethodReference;
 import org.jf.dexlib2.writer.io.FileDataStore;
 import org.jf.dexlib2.writer.pool.DexPool;
 import com.google.common.collect.ImmutableList;
@@ -32,137 +35,210 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Static dexlib2 patch for Facebook 576 feed-ads block (Route C).
+ * Static Facebook 576 ad-route patcher.
  *
- * Patches LX/1lJ;.addNewEdgeToCollection(ImmutableList$Builder,
- *   GraphQLFeedUnitEdge, LX/1et;) -> Z (FeedUnitCollectionManager, classes.dex).
- *
- * Injected prefix (23 code units). Parameters live in the high register group
- * (regs=30, insSize=4): v26=this, v27=builder, v28=edge, v29=enum. Scratch v4/v5
- * are locals (the original body writes them only later), v0 is the return reg.
- *
- *   0x00 invoke-virtual/range {v28}, GraphQLFeedUnitEdge.B9B():GraphQLFeedStoryCategory
- *   0x03 move-result-object v4            // v4 = edge category
- *   0x04 sget-object v5, A0K              // SPONSORED
- *   0x06 if-eq v4, v5, +15                // -> DROP (0x15)
- *   0x08 sget-object v5, A0I              // PROMOTION
- *   0x0a if-eq v4, v5, +11                // -> DROP
- *   0x0c sget-object v5, A0C              // FRIENDLY_FEED_PROMOTION
- *   0x0e if-eq v4, v5, +7                 // -> DROP
- *   0x10 sget-object v5, A0D              // HIGH_VALUE_PROMOTION
- *   0x12 if-eq v4, v5, +3                 // -> DROP
- *   0x14 goto +3                          // -> original body (0x17)
- *   0x15 const/4 v0, 0                    // DROP
- *   0x16 return v0                        // return false
- *   0x17 <original body>
- *
- * Enum constants (verified in GraphQLFeedStoryCategory <clinit>):
- *   A0K=SPONSORED, A0I=PROMOTION, A0C=FRIENDLY_FEED_PROMOTION, A0D=HIGH_VALUE_PROMOTION.
+ * The target names/descriptors are the verified 576 map in ADS_BLOCK_576_REPORT.md.
+ * The patcher is intentionally no-op for every other class/method so it can be
+ * run over all 18 superpack DEX files.
  */
 public class PatchAds {
-    static final int PREFIX_UNITS = 23; // 3+1+2+2+2+2+2+2+2+2+1+1+1
-
+    static final int PREFIX_UNITS = 23;
     static final String CATEGORY = "Lcom/crossapp/graphql/facebook/enums/GraphQLFeedStoryCategory;";
+    static final String IMMUTABLE_LIST = "Lcom/google/common/collect/ImmutableList;";
 
     static final MethodReference B9B = new ImmutableMethodReference(
-            "Lcom/facebook/graphql/model/GraphQLFeedUnitEdge;",
-            "B9B", ImmutableList.<String>of(), CATEGORY);
+            "Lcom/facebook/graphql/model/GraphQLFeedUnitEdge;", "B9B",
+            ImmutableList.<String>of(), CATEGORY);
+    static final MethodReference EMPTY_LIST = new ImmutableMethodReference(
+            IMMUTABLE_LIST, "of", ImmutableList.<String>of(), IMMUTABLE_LIST);
 
-    /** Ad categories to drop before the original body runs. */
-    static final String[] DROP_FIELDS = { "A0K", "A0I", "A0C", "A0D" };
+    static final String[] DROP_FIELDS = {"A0K", "A0I", "A0C", "A0D"};
 
     static FieldReference field(String name) {
         return new ImmutableFieldReference(CATEGORY, name, CATEGORY);
     }
 
-    static List<Instruction> buildPrefix() {
+    static List<Instruction> feedFilterPrefix() {
         List<Instruction> out = new ArrayList<Instruction>();
-        // v28 = edge (param index 1 lives in high reg group v26..v29: v26=this v27=builder v28=edge v29=enum)
-        // 35c cannot encode v28, so use invoke-virtual/range (3rc).
+        // In the verified method (regs=30, ins=4), p1=edge is v28.
         out.add(new ImmutableInstruction3rc(Opcode.INVOKE_VIRTUAL_RANGE, 28, 1, B9B));
         out.add(new ImmutableInstruction11x(Opcode.MOVE_RESULT_OBJECT, 4));
-        // DROP const/4 v0,0 sits at address 0x15 (21); branch offsets are relative
-        // to each if-eq instruction address (6, 10, 14, 18).
-        int[] offsets = { 15, 11, 7, 3 };
+        int[] offsets = {15, 11, 7, 3};
         for (int i = 0; i < DROP_FIELDS.length; i++) {
             out.add(new ImmutableInstruction21c(Opcode.SGET_OBJECT, 5, field(DROP_FIELDS[i])));
             out.add(new ImmutableInstruction22t(Opcode.IF_EQ, 4, 5, offsets[i]));
         }
-        out.add(new ImmutableInstruction10t(Opcode.GOTO, 3));          // skip DROP -> original
-        out.add(new ImmutableInstruction11n(Opcode.CONST_4, 0, 0));    // DROP: v0 = 0 (false)
-        out.add(new ImmutableInstruction11x(Opcode.RETURN, 0));        // return v0
+        out.add(new ImmutableInstruction10t(Opcode.GOTO, 3));
+        out.add(new ImmutableInstruction11n(Opcode.CONST_4, 0, 0));
+        out.add(new ImmutableInstruction11x(Opcode.RETURN, 0));
         return out;
     }
 
-    public static void main(String[] args) throws Exception {
-        File in = new File(args[0]);
-        File out = new File(args[1]);
-        Opcodes opcodes = Opcodes.getDefault();
-        DexFile dex = DexFileFactory.loadDexFile(in, opcodes);
-        DexPool pool = new DexPool(opcodes);
-        int patched = 0;
-        for (ClassDef cd : dex.getClasses()) {
-            if (cd.getType().equals("LX/1lJ;")) {
-                List<Method> newDirect = new ArrayList<Method>();
-                for (Method m : cd.getDirectMethods()) newDirect.add(m);
-                List<Method> newVirtual = new ArrayList<Method>();
-                for (Method m : cd.getVirtualMethods()) {
-                    if (isTarget(m)) {
-                        newVirtual.add(patch(m));
-                        patched++;
-                    } else {
-                        newVirtual.add(m);
-                    }
-                }
-                ImmutableClassDef ncd = new ImmutableClassDef(
-                        cd.getType(), cd.getAccessFlags(), cd.getSuperclass(), cd.getInterfaces(),
-                        cd.getSourceFile(), cd.getAnnotations(),
-                        cd.getStaticFields(), cd.getInstanceFields(), newDirect, newVirtual);
-                pool.internClass(ncd);
-            } else {
-                pool.internClass(cd);
-            }
+    static Method replaceWithVoid(Method m) {
+        List<Instruction> insns = ImmutableList.<Instruction>of(
+                new ImmutableInstruction10x(Opcode.RETURN_VOID));
+        return copyMethod(m, new ImmutableMethodImplementation(
+                registerCount(m), insns, ImmutableList.of(), ImmutableList.of()));
+    }
+
+    static Method replaceWithFalse(Method m) {
+        List<Instruction> insns = ImmutableList.<Instruction>of(
+                new ImmutableInstruction11n(Opcode.CONST_4, 0, 0),
+                new ImmutableInstruction11x(Opcode.RETURN, 0));
+        return copyMethod(m, new ImmutableMethodImplementation(
+                registerCount(m), insns, ImmutableList.of(), ImmutableList.of()));
+    }
+
+    static Method replaceWithNull(Method m) {
+        List<Instruction> insns = ImmutableList.<Instruction>of(
+                new ImmutableInstruction11n(Opcode.CONST_4, 0, 0),
+                new ImmutableInstruction11x(Opcode.RETURN_OBJECT, 0));
+        return copyMethod(m, new ImmutableMethodImplementation(
+                registerCount(m), insns, ImmutableList.of(), ImmutableList.of()));
+    }
+
+    static Method replaceWithEmptyList(Method m) {
+        List<Instruction> insns = ImmutableList.<Instruction>of(
+                new ImmutableInstruction35c(Opcode.INVOKE_STATIC, 0, 0, 0, 0, 0, 0, EMPTY_LIST),
+                new ImmutableInstruction11x(Opcode.MOVE_RESULT_OBJECT, 0),
+                new ImmutableInstruction11x(Opcode.RETURN_OBJECT, 0));
+        return copyMethod(m, new ImmutableMethodImplementation(
+                registerCount(m), insns, ImmutableList.of(), ImmutableList.of()));
+    }
+
+    static int registerCount(Method m) {
+        int words = ((m.getAccessFlags() & 0x8) == 0) ? 1 : 0;
+        for (CharSequence p : m.getParameterTypes()) {
+            words += (p.equals("J") || p.equals("D")) ? 2 : 1;
         }
-        pool.writeTo(new FileDataStore(out));
-        System.out.println("patched methods: " + patched + "  -> " + out);
+        MethodImplementation old = m.getImplementation();
+        return Math.max(words, old == null ? words : old.getRegisterCount());
     }
 
-    static boolean isTarget(Method m) {
-        return m.getName().equals("addNewEdgeToCollection")
-                && m.getReturnType().equals("Z")
-                && m.getParameters().size() == 3;
+    static Method copyMethod(Method m, MethodImplementation impl) {
+        return new ImmutableMethod(m.getDefiningClass(), m.getName(), m.getParameters(),
+                m.getReturnType(), m.getAccessFlags(), m.getAnnotations(),
+                m.getHiddenApiRestrictions(), impl);
     }
 
-    static Method patch(Method m) {
+    static Method prefixFeedFilter(Method m) {
         MethodImplementation impl = m.getImplementation();
-        int newRegs = impl.getRegisterCount();
-        int insnCount = 0;
-        for (Instruction i : impl.getInstructions()) insnCount++;
-        System.out.println("patching " + m.getDefiningClass() + "->" + m.getName()
-                + " params=" + m.getParameters().size()
-                + " ret=" + m.getReturnType()
-                + " regs=" + newRegs
-                + " insns=" + insnCount
-                + " tryBlocks=" + impl.getTryBlocks().size());
-
+        if (impl == null || impl.getRegisterCount() < 6) return m;
         List<Instruction> insns = new ArrayList<Instruction>();
-        insns.addAll(buildPrefix());
+        insns.addAll(feedFilterPrefix());
         for (Instruction i : impl.getInstructions()) insns.add(i);
 
-        List<ImmutableTryBlock> newTry = new ArrayList<ImmutableTryBlock>();
+        List<ImmutableTryBlock> tries = new ArrayList<ImmutableTryBlock>();
         for (TryBlock<? extends ExceptionHandler> tb : impl.getTryBlocks()) {
-            List<ImmutableExceptionHandler> nh = new ArrayList<ImmutableExceptionHandler>();
+            List<ImmutableExceptionHandler> handlers = new ArrayList<ImmutableExceptionHandler>();
             for (ExceptionHandler h : tb.getExceptionHandlers()) {
-                nh.add(new ImmutableExceptionHandler(h.getExceptionType(),
+                handlers.add(new ImmutableExceptionHandler(h.getExceptionType(),
                         h.getHandlerCodeAddress() + PREFIX_UNITS));
             }
-            newTry.add(new ImmutableTryBlock(tb.getStartCodeAddress() + PREFIX_UNITS,
-                    tb.getCodeUnitCount(), nh));
+            tries.add(new ImmutableTryBlock(tb.getStartCodeAddress() + PREFIX_UNITS,
+                    tb.getCodeUnitCount(), handlers));
         }
+        return copyMethod(m, new ImmutableMethodImplementation(
+                impl.getRegisterCount(), insns, tries, ImmutableList.of()));
+    }
 
-        MethodImplementation nimpl = new ImmutableMethodImplementation(newRegs, insns, newTry, null);
-        return new ImmutableMethod(
-                m.getDefiningClass(), m.getName(), m.getParameters(), m.getReturnType(),
-                m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), nimpl);
+    static Method patchMethod(String type, Method m) {
+        if (m.getImplementation() == null) return m;
+
+        if (type.equals("LX/1lJ;") && m.getName().equals("addNewEdgeToCollection")
+                && m.getReturnType().equals("Z") && m.getParameters().size() == 3) {
+            return prefixFeedFilter(m);
+        }
+        if (type.equals("LX/3Le;") && m.getName().equals("Di7")
+                && m.getReturnType().equals(IMMUTABLE_LIST) && m.getParameters().size() == 2) {
+            return replaceWithEmptyList(m);
+        }
+        if (type.equals("LX/3Le;") && m.getName().equals("A0D")
+                && m.getReturnType().equals("LX/6mV;") && m.getParameters().size() == 3) {
+            return replaceWithNull(m);
+        }
+        if (type.equals("LX/1mb;") && m.getName().equals("A09")
+                && m.getReturnType().equals("V") && m.getParameters().size() == 1) {
+            return replaceWithVoid(m);
+        }
+        if (type.equals("LX/2yQ;") && m.getName().equals("isAd")
+                && m.getReturnType().equals("Z") && m.getParameters().size() == 1) {
+            return replaceWithFalse(m);
+        }
+        if (type.equals("Lcom/facebook/graphql/model/GraphQLFBMultiAdsFeedUnit;")
+                && m.getName().equals("A00") && !m.getReturnType().equals("V")) {
+            return replaceWithNull(m);
+        }
+        if (type.contains("MainFeedCSRDataLoaderImpl$maybeDoAsyncAdsTailLoad$1")
+                && m.getName().equals("run") && m.getReturnType().equals("V")) {
+            return replaceWithVoid(m);
+        }
+        if (type.equals("LX/OF5;") && m.getName().equals("A05")
+                && m.getReturnType().equals("V") && m.getParameters().size() == 6) {
+            return replaceWithVoid(m);
+        }
+        if (type.equals("LX/OJB;") && m.getName().equals("A03")
+                && m.getReturnType().equals("V") && m.getParameters().size() == 16) {
+            return replaceWithVoid(m);
+        }
+        return m;
+    }
+
+    static boolean hasOriginalName(ClassDef cd, String anchor) {
+        for (Field f : cd.getInstanceFields()) {
+            if (f.getName().equals("__redex_internal_original_name")
+                    && f.getInitialValue() instanceof StringEncodedValue
+                    && ((StringEncodedValue) f.getInitialValue()).getValue().equals(anchor)) {
+                return true;
+            }
+        }
+        for (Field f : cd.getStaticFields()) {
+            if (f.getName().equals("__redex_internal_original_name")
+                    && f.getInitialValue() instanceof StringEncodedValue
+                    && ((StringEncodedValue) f.getInitialValue()).getValue().equals(anchor)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (args.length != 2) throw new IllegalArgumentException("usage: PatchAds input.dex output.dex");
+        DexFile dex = DexFileFactory.loadDexFile(new File(args[0]), Opcodes.getDefault());
+        DexPool pool = new DexPool(Opcodes.getDefault());
+        int patched = 0;
+        for (ClassDef cd : dex.getClasses()) {
+            List<Method> direct = new ArrayList<Method>();
+            List<Method> virtual = new ArrayList<Method>();
+            for (Method m : cd.getDirectMethods()) {
+                Method n = patchMethod(cd.getType(), m);
+                if (n != m) patched++;
+                direct.add(n);
+            }
+            for (Method m : cd.getVirtualMethods()) {
+                Method n = patchMethod(cd.getType(), m);
+                if (n != m) patched++;
+                virtual.add(n);
+            }
+            if (hasOriginalName(cd, "MainFeedCSRDataLoaderImpl$maybeDoAsyncAdsTailLoad$1")) {
+                List<Method> patchedVirtual = new ArrayList<Method>();
+                for (Method m : virtual) {
+                    if (m.getName().equals("run") && m.getReturnType().equals("V")) {
+                        Method n = replaceWithVoid(m);
+                        if (n != m) patched++;
+                        patchedVirtual.add(n);
+                    } else {
+                        patchedVirtual.add(m);
+                    }
+                }
+                virtual = patchedVirtual;
+            }
+            pool.internClass(new ImmutableClassDef(cd.getType(), cd.getAccessFlags(),
+                    cd.getSuperclass(), cd.getInterfaces(), cd.getSourceFile(),
+                    cd.getAnnotations(), cd.getStaticFields(), cd.getInstanceFields(),
+                    direct, virtual));
+        }
+        pool.writeTo(new FileDataStore(new File(args[1])));
+        System.out.println("patched methods: " + patched + "  -> " + args[1]);
     }
 }
