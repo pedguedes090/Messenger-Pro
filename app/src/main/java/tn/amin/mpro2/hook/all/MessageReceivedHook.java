@@ -3,6 +3,7 @@ package tn.amin.mpro2.hook.all;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.lang.reflect.Method;
 
 import de.robv.android.xposed.XC_MethodHook;
 import tn.amin.mpro2.debug.Logger;
@@ -10,11 +11,14 @@ import tn.amin.mpro2.hook.BaseHook;
 import tn.amin.mpro2.hook.HookId;
 import tn.amin.mpro2.hook.HookTime;
 import tn.amin.mpro2.hook.helper.OrcaHookHelper;
+import tn.amin.mpro2.hook.unobfuscation.OrcaUnobfuscator;
 import tn.amin.mpro2.messaging.history.MessageHistoryStore;
 import tn.amin.mpro2.orca.OrcaGateway;
 
 /**
- * Captures incoming message content for Messenger 576.
+ * Captures incoming message content from a configured Mailbox notification action.
+ * The legacy action is used only for builds where it was verified; newer builds fail
+ * closed until the action code is confirmed from runtime evidence.
  * <p>
  * In Messenger 576 the "new message" notification is action 29 on MailboxCoreJNI:
  * <pre>
@@ -35,7 +39,8 @@ import tn.amin.mpro2.orca.OrcaGateway;
  * old heuristic "learn + recursive scan" approach that captured unrelated dispatches.
  */
 public class MessageReceivedHook extends BaseHook {
-    private static final int NOTIFICATION_ACTION_576 = 29;
+    private static final int LEGACY_NOTIFICATION_ACTION = 29;
+    private static final int LAST_VERSION_WITH_VERIFIED_LEGACY_ACTION = 345212666;
     private static final String[] DISPATCH_CATEGORIES = {"Core", "SDK", "Orca"};
 
     @Override
@@ -51,6 +56,19 @@ public class MessageReceivedHook extends BaseHook {
     @Override
     protected Set<XC_MethodHook.Unhook> injectInternal(OrcaGateway gateway) {
         Set<XC_MethodHook.Unhook> hooks = new HashSet<>();
+        Integer configuredAction = gateway.unobfuscator.getAPICode(OrcaUnobfuscator.API_NOTIFICATION);
+        int version = gateway.state.getOrcaVersion();
+        int action = NotificationDispatchPolicy.resolve(
+                configuredAction == null ? -1 : configuredAction,
+                version,
+                LAST_VERSION_WITH_VERIFIED_LEGACY_ACTION,
+                LEGACY_NOTIFICATION_ACTION);
+        if (action < 0) {
+            Logger.warn("MessageReceivedHook: API_NOTIFICATION is not verified for Orca build "
+                    + version + "; hook left disabled. Set API_NOTIFICATION in API Codes after runtime verification.");
+            return hooks;
+        }
+        Logger.info("MessageReceivedHook: action=" + action + " build=" + version);
 
         XC_MethodHook hook = wrap(new XC_MethodHook() {
             @Override
@@ -62,7 +80,8 @@ public class MessageReceivedHook extends BaseHook {
         for (String category : DISPATCH_CATEGORIES) {
             try {
                 hooks.addAll(OrcaHookHelper.hookFeature(
-                        NOTIFICATION_ACTION_576, "V", category, gateway.classLoader, hook));
+                        action, "V", category, gateway.classLoader, hook,
+                        MessageReceivedHook::isNotificationDispatchSignature));
             } catch (Throwable t) {
                 Logger.warn("MessageReceivedHook: failed to hook " + category + ": " + t.getMessage());
             }
@@ -97,8 +116,7 @@ public class MessageReceivedHook extends BaseHook {
             return;
         }
 
-        Logger.verbose("MessageReceivedHook: sender=" + safe(sender) + " mid=" + safe(messageId)
-                + " tk=" + threadKey + " msg=" + safe(content));
+        Logger.verbose("MessageReceivedHook: received notification payload (content omitted)");
 
         if (gateway.pref != null && gateway.pref.isMessageHistoryEnabled()) {
             MessageHistoryStore.appendIncoming(gateway.getContext(), content, messageId, sender, threadKey);
@@ -140,11 +158,8 @@ public class MessageReceivedHook extends BaseHook {
         return lower.matches("^[a-z0-9_]{18,}$");
     }
 
-    private String safe(String value) {
-        if (value == null) {
-            return "null";
-        }
-        return value.length() > 80 ? value.substring(0, 80) + "..." : value;
+    static boolean isNotificationDispatchSignature(Method method) {
+        return NotificationDispatchSignature.matches(method);
     }
 
     public interface MessageReceivedListener {

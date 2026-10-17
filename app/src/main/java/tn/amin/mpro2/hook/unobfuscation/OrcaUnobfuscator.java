@@ -10,9 +10,28 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import org.jf.dexlib2.DexFileFactory;
+import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.iface.ClassDef;
+import org.jf.dexlib2.iface.MultiDexContainer;
+import org.jf.dexlib2.iface.instruction.FiveRegisterInstruction;
+import org.jf.dexlib2.iface.instruction.Instruction;
+import org.jf.dexlib2.iface.instruction.OneRegisterInstruction;
+import org.jf.dexlib2.iface.instruction.ReferenceInstruction;
+import org.jf.dexlib2.iface.instruction.RegisterRangeInstruction;
+import org.jf.dexlib2.iface.instruction.TwoRegisterInstruction;
+import org.jf.dexlib2.iface.reference.FieldReference;
+import org.jf.dexlib2.iface.reference.MethodReference;
+import org.jf.dexlib2.iface.reference.Reference;
+import org.jf.dexlib2.iface.reference.StringReference;
+import org.jf.dexlib2.immutable.reference.ImmutableFieldReference;
 
 import io.github.neonorbit.dexplore.DexFactory;
 import io.github.neonorbit.dexplore.Dexplore;
@@ -329,14 +348,7 @@ public class OrcaUnobfuscator {
     }
 
     private int loadAPINotification() {
-        int configured = NumberUtils.toInt(mPref.getString(API_NOTIFICATION, null), -1);
-
-        // Legacy default 26 is stale on newer Messenger builds; relearn dynamically.
-        if (configured == 26) {
-            return -1;
-        }
-
-        return configured;
+        return NumberUtils.toInt(mPref.getString(API_NOTIFICATION, null), -1);
     }
 
     private int loadAPIConversationEnter() {
@@ -357,6 +369,13 @@ public class OrcaUnobfuscator {
 
     public Field loadMessageFieldId() {
         return loadField(FIELD_MESSAGE_ID, () -> {
+            FieldRefData wireField = findMessageIdFieldFromDatabaseWireKey();
+            if (wireField != null) {
+                Logger.info("Resolved Message.id through msg_id database serialization");
+                return wireField;
+            }
+
+            Logger.warn("Message.id serializer fingerprint unavailable; trying legacy cache reference");
             ClassData MsysThreadsCache = mDexplore.findClass(DexFilter.MATCH_ALL,
                     ClassFilter.builder()
                             .setReferenceTypes(ReferenceTypes.builder().addString().build())
@@ -380,6 +399,127 @@ public class OrcaUnobfuscator {
 
             return refData.get(0);
         });
+    }
+
+    private FieldRefData findMessageIdFieldFromDatabaseWireKey() {
+        final String messageDescriptor = "L" + OrcaClassNames.MESSAGE.replace('.', '/') + ";";
+        FieldReference resolved = null;
+        try {
+            MultiDexContainer<? extends DexBackedDexFile> container =
+                    DexFileFactory.loadDexContainer(new java.io.File(mPath), Opcodes.getDefault());
+            for (String dexName : container.getDexEntryNames()) {
+                MultiDexContainer.DexEntry<? extends DexBackedDexFile> entry = container.getEntry(dexName);
+                if (entry == null) continue;
+                for (ClassDef classDef : entry.getDexFile().getClasses()) {
+                    for (org.jf.dexlib2.iface.Method method : classDef.getMethods()) {
+                        if (!method.getReturnType().equals("V") || method.getParameterTypes().isEmpty()
+                                || !method.getParameterTypes().get(method.getParameterTypes().size() - 1)
+                                .equals(messageDescriptor)
+                                || !methodContainsString(method, "DbInsertThreadsHandler.updateMessagesTablesInternal")
+                                || !methodContainsString(method, "msg_id")) {
+                            continue;
+                        }
+
+                        FieldReference candidate = findFieldWrittenToMsgIdColumn(method, messageDescriptor);
+                        if (candidate == null) continue;
+                        if (resolved != null && (!resolved.getDefiningClass().equals(candidate.getDefiningClass())
+                                || !resolved.getName().equals(candidate.getName())
+                                || !resolved.getType().equals(candidate.getType()))) {
+                            Logger.warn("Message.id serializer fingerprint is ambiguous");
+                            return null;
+                        }
+                        resolved = candidate;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Logger.warn("Message.id DEX scan failed: " + e.getClass().getSimpleName());
+            return null;
+        }
+
+        return resolved == null ? null : FieldRefData.build(
+                new ImmutableFieldReference(resolved.getDefiningClass(), resolved.getName(), resolved.getType()), true);
+    }
+
+    private boolean methodContainsString(org.jf.dexlib2.iface.Method method, String value) {
+        if (method.getImplementation() == null) return false;
+        for (Instruction instruction : method.getImplementation().getInstructions()) {
+            if (!(instruction instanceof ReferenceInstruction)) continue;
+            Reference reference = ((ReferenceInstruction) instruction).getReference();
+            if (reference instanceof StringReference
+                    && ((StringReference) reference).getString().equals(value)) return true;
+        }
+        return false;
+    }
+
+    private FieldReference findFieldWrittenToMsgIdColumn(org.jf.dexlib2.iface.Method method,
+                                                          String messageDescriptor) {
+        List<Instruction> instructions = new java.util.ArrayList<>();
+        for (Instruction instruction : method.getImplementation().getInstructions()) instructions.add(instruction);
+
+        for (int i = 0; i < instructions.size(); i++) {
+            Instruction marker = instructions.get(i);
+            if (!(marker instanceof ReferenceInstruction) || !(marker instanceof OneRegisterInstruction)) continue;
+            Reference markerReference = ((ReferenceInstruction) marker).getReference();
+            if (!(markerReference instanceof StringReference)
+                    || !((StringReference) markerReference).getString().equals("msg_id")) continue;
+
+            Set<Integer> keyRegisters = new HashSet<>();
+            Set<Integer> valueRegisters = new HashSet<>();
+            keyRegisters.add(((OneRegisterInstruction) marker).getRegisterA());
+            FieldReference candidateField = null;
+            int limit = Math.min(instructions.size(), i + 14);
+
+            for (int j = i + 1; j < limit; j++) {
+                Instruction instruction = instructions.get(j);
+                String opcode = instruction.getOpcode().name();
+                if (instruction instanceof TwoRegisterInstruction && opcode.startsWith("MOVE_OBJECT")) {
+                    TwoRegisterInstruction move = (TwoRegisterInstruction) instruction;
+                    if (keyRegisters.contains(move.getRegisterB())) keyRegisters.add(move.getRegisterA());
+                    if (valueRegisters.contains(move.getRegisterB())) valueRegisters.add(move.getRegisterA());
+                }
+
+                if (instruction instanceof ReferenceInstruction && opcode.startsWith("IGET_OBJECT")
+                        && instruction instanceof TwoRegisterInstruction) {
+                    Reference reference = ((ReferenceInstruction) instruction).getReference();
+                    if (reference instanceof FieldReference) {
+                        FieldReference field = (FieldReference) reference;
+                        if (field.getDefiningClass().equals(messageDescriptor)
+                                && field.getType().equals("Ljava/lang/String;")) {
+                            candidateField = field;
+                            valueRegisters.clear();
+                            valueRegisters.add(((TwoRegisterInstruction) instruction).getRegisterA());
+                        }
+                    }
+                }
+
+                if (!(instruction instanceof ReferenceInstruction) || !opcode.startsWith("INVOKE")) continue;
+                Reference reference = ((ReferenceInstruction) instruction).getReference();
+                if (!(reference instanceof MethodReference)) continue;
+                MethodReference called = (MethodReference) reference;
+                if (!called.getDefiningClass().equals("Landroid/content/ContentValues;")
+                        || !called.getName().equals("put") || !called.getReturnType().equals("V")
+                        || !called.getParameterTypes().equals(Arrays.asList(
+                                "Ljava/lang/String;", "Ljava/lang/String;"))) continue;
+
+                int keyRegister = -1;
+                int valueRegister = -1;
+                if (instruction instanceof FiveRegisterInstruction
+                        && ((FiveRegisterInstruction) instruction).getRegisterCount() >= 3) {
+                    FiveRegisterInstruction invoke = (FiveRegisterInstruction) instruction;
+                    keyRegister = invoke.getRegisterD();
+                    valueRegister = invoke.getRegisterE();
+                } else if (instruction instanceof RegisterRangeInstruction
+                        && ((RegisterRangeInstruction) instruction).getRegisterCount() >= 3) {
+                    int start = ((RegisterRangeInstruction) instruction).getStartRegister();
+                    keyRegister = start + 1;
+                    valueRegister = start + 2;
+                }
+                if (candidateField != null && keyRegisters.contains(keyRegister)
+                        && valueRegisters.contains(valueRegister)) return candidateField;
+            }
+        }
+        return null;
     }
 
     private Class<?> loadClass(String simpleName, ClassFilter classFilter) {

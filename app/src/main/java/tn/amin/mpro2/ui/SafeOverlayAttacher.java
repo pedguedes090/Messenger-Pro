@@ -1,5 +1,6 @@
 package tn.amin.mpro2.ui;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,6 +21,7 @@ public class SafeOverlayAttacher implements Runnable {
 
     private OnOverlayAttachedListener mListener = null;
     private boolean shouldAttach = true;
+    private int mFailedAttachAttempts = 0;
 
 
     public SafeOverlayAttacher(View view, WindowManager.LayoutParams layoutParams) {
@@ -39,6 +41,8 @@ public class SafeOverlayAttacher implements Runnable {
     }
 
     public void attach() {
+        shouldAttach = true;
+        mFailedAttachAttempts = 0;
         mHandler.post(this);
     }
 
@@ -54,6 +58,14 @@ public class SafeOverlayAttacher implements Runnable {
         boolean success = false;
         try {
             if (shouldAttach) {
+                if (!resolveApplicationPanelToken()) {
+                    Logger.verbose("Waiting for an active Activity window token before attaching overlay");
+                    return;
+                }
+                if (!shouldAttach) {
+                    success = true;
+                    return;
+                }
                 if (ViewCompat.isAttachedToWindow(mView)) {
                     Logger.info("Overlay already added, removing and adding again...");
                     mWindowManager.removeView(mView);
@@ -69,8 +81,9 @@ public class SafeOverlayAttacher implements Runnable {
                 }
             }
             success = true;
+            mFailedAttachAttempts = 0;
         } catch (WindowManager.BadTokenException e) {
-            Logger.info("Overlay adding/removing failed");
+            Logger.warn("Overlay add failed because the Activity window token was rejected");
             Logger.verbose(Log.getStackTraceString(e));
         } catch (IllegalStateException e) {
             Logger.info("Overlay already in WindowManager ?");
@@ -78,9 +91,33 @@ public class SafeOverlayAttacher implements Runnable {
             mWindowManager.removeView(mView);
         } finally {
             if (!success) {
-                mHandler.postDelayed(this, mDelay);
+                mFailedAttachAttempts++;
+                if (shouldAttach && mFailedAttachAttempts <= 6) {
+                    mHandler.postDelayed(this, mDelay);
+                } else if (shouldAttach) {
+                    shouldAttach = false;
+                    Logger.warn("Overlay attachment stopped after repeated window-token failures");
+                }
             }
         }
+    }
+
+    private boolean resolveApplicationPanelToken() {
+        if (mLayoutParams.type != WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
+                || mLayoutParams.token != null) {
+            return true;
+        }
+        Context context = mView.getContext();
+        if (!(context instanceof Activity)) {
+            return false;
+        }
+        Activity activity = (Activity) context;
+        if (activity.isFinishing() || activity.isDestroyed()) {
+            shouldAttach = false;
+            return true;
+        }
+        mLayoutParams.token = activity.getWindow().getDecorView().getWindowToken();
+        return mLayoutParams.token != null;
     }
 
     public interface OnOverlayAttachedListener {

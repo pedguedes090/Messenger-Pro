@@ -86,6 +86,8 @@ public class MProPatcher implements
 
     private boolean mInternalSetupFinished = false;
     private boolean mSetupFinished = false;
+    private boolean mWelcomeDialogPending = false;
+    private boolean mWelcomeDialogScheduled = false;
 
     public MProPatcher(OrcaGateway gateway) {
         this.gateway = gateway;
@@ -171,9 +173,8 @@ public class MProPatcher implements
         }
 
         else if (gateway.state.isFirstTime()) {
-            doOnActivitySet(() -> new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                showWelcomeDialog();
-            }, 500));
+            mWelcomeDialogPending = true;
+            doOnActivitySet(this::scheduleWelcomeDialog);
         }
 
         try {
@@ -342,11 +343,23 @@ public class MProPatcher implements
         return sb.toString();
     }
 
-    private AlertDialog.Builder buildDialog(@StringRes int title, String message) {
-        return new AlertDialog.Builder(getActivity())
+    private boolean isUsableActivity(Activity activity) {
+        return activity != null && !activity.isFinishing() && !activity.isDestroyed();
+    }
+
+    private AlertDialog.Builder buildDialog(Activity activity, @StringRes int title, String message) {
+        if (!isUsableActivity(activity)) {
+            Logger.warn("MProPatcher: skipped dialog because Messenger has no active Activity");
+            return null;
+        }
+        return new AlertDialog.Builder(activity)
                 .setTitle(gateway.res.getString(title))
                 .setMessage(message)
                 .setCancelable(false);
+    }
+
+    private AlertDialog.Builder buildDialog(@StringRes int title, String message) {
+        return buildDialog(getActivity(), title, message);
     }
 
     private AlertDialog.Builder buildDialog(@StringRes int title, @StringRes int message) {
@@ -354,19 +367,47 @@ public class MProPatcher implements
     }
 
     private void showDialog(AlertDialog.Builder dialog) {
+        if (dialog == null) {
+            return;
+        }
         try {
             dialog.show();
         } catch (WindowManager.BadTokenException e) {
-            Logger.verbose("Failed to show dialog, trying again in 1s");
-            new Handler(Looper.getMainLooper()).postDelayed(() -> showDialog(dialog), 1000);
+            Logger.warn("MProPatcher: skipped dialog because its Activity window is no longer valid");
         }
     }
 
-    private void showWelcomeDialog() {
-        showDialog(buildDialog(R.string.app_name, R.string.welcome_to_mpro_message)
+    private void scheduleWelcomeDialog() {
+        if (!mWelcomeDialogPending || mWelcomeDialogScheduled) {
+            return;
+        }
+        mWelcomeDialogScheduled = true;
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            mWelcomeDialogScheduled = false;
+            Activity activity = getActivity();
+            if (!mWelcomeDialogPending || !isUsableActivity(activity)) {
+                Logger.info("MProPatcher: welcome dialog deferred until a live Messenger Activity exists");
+                return;
+            }
+            mWelcomeDialogPending = false;
+            showWelcomeDialog(activity);
+        }, 500);
+    }
+
+    private void showWelcomeDialog(Activity activity) {
+        AlertDialog.Builder dialog = buildDialog(activity, R.string.app_name,
+                gateway.res.getString(R.string.welcome_to_mpro_message));
+        if (dialog == null) {
+            mWelcomeDialogPending = true;
+            return;
+        }
+        showDialog(dialog
                 .setPositiveButton(android.R.string.ok, (d, i) -> {
+                    if (!isUsableActivity(activity)) {
+                        return;
+                    }
                     Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(ModuleInfo.LINK_GITHUB_WIKI_USAGE_GUIDE));
-                    getActivity().startActivity(browserIntent);
+                    activity.startActivity(browserIntent);
                     showProgressUntilSetupFinished();
                 })
                 .setNegativeButton(android.R.string.cancel, (d, i) -> {
@@ -379,10 +420,10 @@ public class MProPatcher implements
     }
 
     private void showWarningDialog(String message) {
-        showDialog(
-                buildDialog(R.string.warning_dialog_title, message)
-                        .setPositiveButton(android.R.string.ok, (dialogInterface, i) -> {
-                        }));
+        AlertDialog.Builder dialog = buildDialog(R.string.warning_dialog_title, message);
+        if (dialog != null) {
+            showDialog(dialog.setPositiveButton(android.R.string.ok, (dialogInterface, i) -> {}));
+        }
     }
 
     private void showErrorDialog(@StringRes int message) {
@@ -390,19 +431,31 @@ public class MProPatcher implements
     }
 
     private void showErrorDialog(String message) {
-        showDialog(
-            buildDialog(R.string.warning_dialog_title, message)
-                    .setPositiveButton(android.R.string.ok, (dialogInterface, i) -> {
-                        getActivity().finishAffinity();
-                        System.exit(0);
-                    }));
+        Activity activity = getActivity();
+        AlertDialog.Builder dialog = buildDialog(activity, R.string.warning_dialog_title, message);
+        if (dialog != null) {
+            showDialog(dialog.setPositiveButton(android.R.string.ok, (dialogInterface, i) -> {
+                if (isUsableActivity(activity)) {
+                    activity.finishAffinity();
+                }
+                System.exit(0);
+            }));
+        }
     }
 
     private void showPatreonPopup() {
-        showDialog(buildDialog(R.string.app_name, R.string.patreon_popup_message)
+        Activity activity = getActivity();
+        AlertDialog.Builder dialog = buildDialog(activity, R.string.app_name,
+                gateway.res.getString(R.string.patreon_popup_message));
+        if (dialog == null) {
+            return;
+        }
+        showDialog(dialog
                     .setPositiveButton(gateway.res.getString(R.string.take_me), (dialogInterface, i) -> {
                         Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(ModuleInfo.LINK_PATREON_PAGE));
-                        getActivity().startActivity(browserIntent);
+                        if (isUsableActivity(activity)) {
+                            activity.startActivity(browserIntent);
+                        }
                     })
                     .setNeutralButton(gateway.res.getString(R.string.later), (dialogInterface, i) -> {
                     })
@@ -493,6 +546,10 @@ public class MProPatcher implements
      */
     @Override
     public void onActivityResume(Activity activity) {
+        if (mWelcomeDialogPending && isUsableActivity(activity)) {
+            setActivity(activity);
+            scheduleWelcomeDialog();
+        }
         doOnSetupFinished(() -> {
             long timeElapsed = gateway.state.getTimeElapsed("lastOpenP");
 
