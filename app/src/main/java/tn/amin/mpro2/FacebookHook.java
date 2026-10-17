@@ -23,9 +23,9 @@ import java.lang.reflect.Method;
  * via {@link KatanaUnobfuscator} using STABLE string anchors (GraphQL wire names /
  * log strings that cannot be obfuscated).
  * <p>
- * Facebook 576 also uses "superpack": the real code lives in secondary DEX packed in
- * a zip at {@code /data/data/com.facebook.katana/dex/z-*.zip}, loaded lazily. So all
- * hooks are deferred until the first Activity is created (background thread).
+ * Some Facebook builds use "superpack" and expose DEX in a zip under the app data
+ * directory; other builds keep DEX in the installed APK. Hook discovery is deferred
+ * until the first Activity is created and runs on a background thread.
  */
 public class FacebookHook {
     public static final String FACEBOOK_PACKAGE = "com.facebook.katana";
@@ -34,6 +34,7 @@ public class FacebookHook {
         Log.e("MProFB", "install() called");
         final ClassLoader classLoader = lpparam.classLoader;
         final String dataDir = lpparam.appInfo.dataDir;
+        final String sourceDir = lpparam.appInfo.sourceDir;
         try {
             XposedHelpers.findAndHookMethod(
                     "android.app.Activity", classLoader, "onCreate", android.os.Bundle.class,
@@ -49,7 +50,7 @@ public class FacebookHook {
                             final Context context = (Context) param.thisObject;
                             Log.e("MProFB", "Activity.onCreate fired");
                             Thread t = new Thread(
-                                    () -> installAllHooks(context, dataDir, classLoader),
+                                    () -> installAllHooks(context, dataDir, sourceDir, classLoader),
                                     "mpro-katana-unobf");
                             t.setDaemon(true);
                             t.start();
@@ -62,8 +63,13 @@ public class FacebookHook {
         }
     }
 
-    private static void installAllHooks(final Context context, String dataDir, ClassLoader classLoader) {
+    private static void installAllHooks(final Context context, String dataDir,
+                                        String sourceDir, ClassLoader classLoader) {
         String dexPath = KatanaUnobfuscator.findSuperpackDexPath(dataDir);
+        if (dexPath == null && sourceDir != null && new java.io.File(sourceDir).isFile()) {
+            dexPath = sourceDir;
+            Logger.info("FacebookHook: scanning installed APK DEX container");
+        }
         Log.e("MProFB", "installAllHooks dexPath=" + dexPath);
         if (dexPath == null) {
             toast(context, "MPro FB: KHONG tim thay superpack dex");
@@ -77,11 +83,7 @@ public class FacebookHook {
             if (installStorySeenSyncBlock(unobfuscator)) ok++;
             if (installStorySeenReceiptsBlock(unobfuscator)) ok++;
             if (installStoryViewerSeenHelperBlock(unobfuscator)) ok++;
-            // New hooks for ads blocking
-            if (installStoryAdBlock(unobfuscator)) ok++;
-            if (installGameAdBlock(unobfuscator)) ok++;
-            if (installAudienceNetworkBlock(unobfuscator)) ok++;
-            toast(context, "MPro FB: da cai " + ok + " hooks (seen+ads)");
+            toast(context, "MPro FB: da cai " + ok + " hooks (story)");
         } catch (Throwable t) {
             Log.e("MProFB", "unobfuscation failed: " + t, t);
             toast(context, "MPro FB: LOI " + t.getMessage());
@@ -180,86 +182,4 @@ public class FacebookHook {
         }
     }
 
-    /**
-     * Block story ads by hooking the merge method in the story ad store.
-     */
-    private static boolean installStoryAdBlock(KatanaUnobfuscator unobfuscator) {
-        try {
-            Method mergeMethod = unobfuscator.loadStoryAdMergeMethod();
-            if (mergeMethod != null) {
-                XposedBridge.hookMethod(mergeMethod, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        // Keep original buckets but prevent insertion
-                        Log.i("MProFB", "Blocked story ad merge");
-                    }
-                });
-                return true;
-            }
-            // Fallback: hook by string anchor "AD_BUCKETS_KEY"
-            Method fallback = unobfuscator.loadMethodByStringAnchor("AD_BUCKETS_KEY");
-            if (fallback != null) {
-                XposedBridge.hookMethod(fallback, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        Log.i("MProFB", "Blocked story ad (fallback)");
-                    }
-                });
-                return true;
-            }
-            return false;
-        } catch (Throwable t) {
-            Log.w("MProFB", "Story ad block failed: " + t.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Block game ads by intercepting quicksilver postMessage calls.
-     */
-    private static boolean installGameAdBlock(KatanaUnobfuscator unobfuscator) {
-        try {
-            Method pmMethod = unobfuscator.loadQuicksilverPostMessageMethod();
-            if (pmMethod != null) {
-                XposedBridge.hookMethod(pmMethod, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        String msg = (String) param.args[0];
-                        if (msg != null && msg.toLowerCase().contains("game")) {
-                            Log.i("MProFB", "Blocked game ad message: " + msg);
-                            param.setResult(null);
-                        }
-                    }
-                });
-                return true;
-            }
-            return false;
-        } catch (Throwable t) {
-            Log.w("MProFB", "Game ad block failed: " + t.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Block Audience Network activities (game ads, interstitials).
-     */
-    private static boolean installAudienceNetworkBlock(KatanaUnobfuscator unobfuscator) {
-        try {
-            Class<?> ancClass = unobfuscator.loadAudienceNetworkActivityClass();
-            if (ancClass != null) {
-                XposedBridge.hookAllConstructors(ancClass, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        Log.i("MProFB", "Blocked AudienceNetworkActivity creation");
-                        throw new IllegalStateException("Blocked by MPro");
-                    }
-                });
-                return true;
-            }
-            return false;
-        } catch (Throwable t) {
-            Log.w("MProFB", "Audience Network block failed: " + t.getMessage());
-            return false;
-        }
-    }
 }

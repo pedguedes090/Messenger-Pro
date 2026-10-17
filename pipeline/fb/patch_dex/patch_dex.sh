@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Compile + run the dexlib2 static patchers for Facebook 576.
-# Usage: patch_dex.sh <seen|ads> <input.dex> <output.dex>
+# Compile + run the dexlib2 static patchers for Facebook 576 and 582 profiles.
+# Usage: patch_dex.sh <seen|ads> <input.dex> <output.dex> [facebook-582]
 set -euo pipefail
 
 KIND="${1:?usage: patch_dex.sh <seen|ads> <input.dex> <output.dex>}"
@@ -30,5 +30,9 @@ MAIN=PatchDex
 [ "$KIND" = "ads" ] && MAIN=PatchAds
 
 javac -cp "$CP" -d "$CLASSES" "$HERE/$MAIN.java"
-java -cp "$CP:$CLASSES" "$MAIN" "$INPUT" "$OUTPUT"
+if [ "$KIND" = "ads" ] && [ "${4:-}" = "facebook-582" ]; then
+  java -cp "$CP:$CLASSES" "$MAIN" "$INPUT" "$OUTPUT" facebook-582
+else
+  java -cp "$CP:$CLASSES" "$MAIN" "$INPUT" "$OUTPUT"
+fi
 echo "wrote $OUTPUT"

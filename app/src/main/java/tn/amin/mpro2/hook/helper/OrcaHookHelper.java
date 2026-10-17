@@ -4,6 +4,7 @@ import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -12,6 +13,12 @@ import tn.amin.mpro2.debug.Logger;
 
 public class OrcaHookHelper {
     public static Set<XC_MethodHook.Unhook> hookFeature(int featureId, String requiredPrefix, String category, ClassLoader classLoader, XC_MethodHook methodHook) {
+        return hookFeature(featureId, requiredPrefix, category, classLoader, methodHook, method -> true);
+    }
+
+    public static Set<XC_MethodHook.Unhook> hookFeature(int featureId, String requiredPrefix,
+            String category, ClassLoader classLoader, XC_MethodHook methodHook,
+            Predicate<Method> methodFilter) {
         HashSet<XC_MethodHook.Unhook> unhooks = new HashSet<>();
         Class<?> cls = XposedHelpers.findClass(
                 "com.facebook." + category.toLowerCase(Locale.ROOT) + ".mca.Mailbox" + category + "JNI", classLoader);
@@ -22,8 +29,8 @@ public class OrcaHookHelper {
         Method cachedAfter = resolveHookMethod(methodHook, "afterHookedMethod");
 
         for (Method method: cls.getDeclaredMethods()) {
-            if (method.getName().startsWith("dispatch" + requiredPrefix)) {
-                Logger.info("hookFeature: hooking " + method.getName() + " paramCount=" + method.getParameterCount());
+            if (method.getName().startsWith("dispatch" + requiredPrefix)
+                    && methodFilter.test(method)) {
 
                 unhooks.add(XposedBridge.hookMethod(method, new XC_MethodHook() {
                     @Override
@@ -42,6 +49,7 @@ public class OrcaHookHelper {
                 }));
             }
         }
+        Logger.info("hookFeature: installed " + unhooks.size() + " candidate(s) in " + cls.getName());
         return unhooks;
     }
 

@@ -1,57 +1,11 @@
-import org.jf.dexlib2.Opcode;
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.DexFileFactory;
-import org.jf.dexlib2.iface.ClassDef;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.iface.Method;
-import org.jf.dexlib2.iface.MethodImplementation;
-import org.jf.dexlib2.iface.instruction.Instruction;
-import org.jf.dexlib2.immutable.ImmutableClassDef;
-import org.jf.dexlib2.immutable.ImmutableMethod;
-import org.jf.dexlib2.immutable.ImmutableMethodImplementation;
-import org.jf.dexlib2.immutable.instruction.ImmutableInstruction11n;
-import org.jf.dexlib2.immutable.instruction.ImmutableInstruction11x;
-import org.jf.dexlib2.writer.io.FileDataStore;
-import org.jf.dexlib2.writer.pool.DexPool;
-import com.google.common.collect.ImmutableList;
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * Compatibility entrypoint for the retired name-based story ad patcher.
+ * The previous implementation prepended integer returns to arbitrary methods whose
+ * names contained "get", "load", or "fetch", which produced invalid or unrelated code.
+ * Route callers through the signature- and model-aware ad patcher instead.
+ */
 public class PatchStoryAds {
     public static void main(String[] args) throws Exception {
-        File in = new File(args[0]);
-        File out = new File(args[1]);
-        Opcodes opcodes = Opcodes.getDefault();
-        DexFile dex = DexFileFactory.loadDexFile(in, opcodes);
-        DexPool pool = new DexPool(opcodes);
-        int patched = 0;
-        for (ClassDef cd : dex.getClasses()) {
-            List<Method> newDirect = new ArrayList<Method>();
-            List<Method> newVirtual = new ArrayList<Method>();
-            for (Method m : cd.getDirectMethods()) newDirect.add(patchMethod(m));
-            for (Method m : cd.getVirtualMethods()) newVirtual.add(patchMethod(m));
-            pool.internClass(new ImmutableClassDef(cd.getType(), cd.getAccessFlags(), cd.getSuperclass(), cd.getInterfaces(), cd.getSourceFile(), cd.getAnnotations(), cd.getStaticFields(), cd.getInstanceFields(), newDirect, newVirtual));
-            patched++;
-        }
-        pool.writeTo(new FileDataStore(out));
-        System.out.println("Story ads patched classes: " + patched + " -> " + out);
-    }
-    static Method patchMethod(Method m) {
-        MethodImplementation impl = m.getImplementation();
-        if (impl == null) return m;
-        int insnCount = 0;
-        for (Instruction i : impl.getInstructions()) insnCount++;
-        if (insnCount == 0) return m;
-        String mName = m.getName();
-        if (mName.contains("fetch") || mName.contains("load") || mName.contains("get") || mName.contains("provide") || mName.contains("merge")) {
-            List<Instruction> insns = new ArrayList<Instruction>();
-            for (Instruction i : impl.getInstructions()) insns.add(i);
-            insns.add(0, new ImmutableInstruction11n(Opcode.CONST_4, 0, 0));
-            insns.add(1, new ImmutableInstruction11x(Opcode.RETURN, 0));
-            MethodImplementation nimpl = new ImmutableMethodImplementation(impl.getRegisterCount() + 2, ImmutableList.copyOf(insns), ImmutableList.of(), ImmutableList.of());
-            return new ImmutableMethod(m.getDefiningClass(), mName, m.getParameters(), m.getReturnType(), m.getAccessFlags(), m.getAnnotations(), m.getHiddenApiRestrictions(), nimpl);
-        }
-        return m;
+        PatchAds.main(args);
     }
 }
