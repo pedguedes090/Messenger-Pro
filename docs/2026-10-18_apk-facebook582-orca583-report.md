@@ -111,6 +111,16 @@ APK SHA-256: Facebook `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee9
   - The `FB_SHORTS` branch requires `GraphQLStory`, calls `LX/3mA.A01(GraphQLStory)`, and returns `false` only when the commerce attachment result is non-null. Other Shorts and other categories continue through the original body.
 - `limitations`: bytecode/control-flow verification is static. A logged-in feed/Reels session is still required to prove Facebook’s live server data reaches these model paths.
 
+### E-011 — Messenger 583 notification model is not a verified JNI action
+
+- `source_ref`: Messenger 583 `classes2.dex` and `classes4.dex`, IDA sessions `56552941` and `666cbf4d`.
+- `repro_command`: enumerate `MailboxCoreJNI` / `MailboxSDKJNI` method descriptors and inspect `NewMessageNotification` and `onMessageReceived` methods in IDA.
+- `raw_excerpt`:
+  - `NewMessageNotification._init_` at classes4.dex `0x5ce33c` has prototype `void(NewMessageNotification, MessengerAccountType, Message, ThreadSummary, ..., flags...)`; it stores a `Message` and thread key as fields. This confirms the Android notification model, not a native dispatch action ID.
+  - `_80P.onMessageReceived` at classes4.dex `0x559780` takes `com.facebook.rsys.transport.gen.SignalingMessage` and records a `MessageReceiver.onMessageReceived` metric. It is a Rsys signaling callback, not evidence for a Mailbox chat-message action.
+  - The current DEX method catalogs contain many overloaded native `dispatchV*` declarations, but static references did not identify a receive action and payload layout that can safely configure `API_NOTIFICATION`.
+- `conclusion`: keep `MessageReceivedHook` disabled for build `346611418` unless an authorized runtime trace or a stronger static call path identifies the action and argument layout.
+
 ## Findings
 
 ### F-001 — Facebook 582 has a structural feed/Reels/Story Ads patch path
@@ -181,6 +191,7 @@ The product-Reel condition does not scan captions. A Reel that only mentions a p
 - 2026-10-18: source and DEX patch profile updated; DEX test, clean Android build, unit tests, and lint passed.
 - 2026-10-18: MuMu `emulator-5554` became available. Facebook 582 and Messenger 583 were launched with the LSPosed module enabled; both remained alive at login surfaces. Messenger completed module unobfuscation; no authenticated feed/Reels or receive-event test was available.
 - 2026-10-18: generated Facebook 582 `classes2.dex` reopened in IDA; feed-filter drop and null/model fail-open control flow verified in the emitted bytecode.
+- 2026-10-18: Messenger 583 notification model and Rsys `onMessageReceived` callback inspected in IDA; neither provides a verified Mailbox receive action, so `API_NOTIFICATION` remains unset.
 
 ## Runtime limits
 
