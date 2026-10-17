@@ -6,7 +6,7 @@
 
 ## Executive summary
 
-The repository now accepts Messenger Orca build `346611418` and recommends `583.0.0.29.95`. Facebook 582 static ad patching now uses model/category and render-path fingerprints instead of the old 576 obfuscated descriptors. It filters paid/sponsored feed edges, commerce-product Reels, the sponsored Reels pool, VideoHome ad requests, and the separate Story Ads fetch path. The generated DEX patch test and the clean Android build, unit tests, and lint pass.
+The repository now accepts Messenger Orca build `346611418` and recommends `583.0.0.29.95`. Facebook 582 static ad patching now uses model/category and render-path fingerprints instead of the old 576 obfuscated descriptors. It filters paid/sponsored feed edges, commerce-product Reels, the sponsored Reels pool, VideoHome ad requests, and the separate Story Ads fetch path. The generated DEX patch test passes; IDA inspection of the emitted `classes2.dex` confirms the feed filter’s drop and fail-open branches. The clean Android build, unit tests, and lint pass.
 
 MuMu Android 15 was available for launch smoke checks. Facebook 582 and Messenger 583 both reached their login surfaces with LSPosed loading the module; Messenger completed module unobfuscation without a crash, while Facebook remained alive after launching the patched APK. The emulator had no logged-in account, so feed/Reels ad-removal behavior and incoming-message dispatch could not be exercised. The Messenger 583 receive action is unresolved; the hook stays disabled by default for that build until `API_NOTIFICATION` is verified.
 
@@ -100,6 +100,17 @@ APK SHA-256: Facebook `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee9
   - Both the module and patched Facebook APK installed successfully on MuMu (`adb install -r` / packaging script `-Install`).
 - `limitations`: Facebook APK is signed with the local Android debug key, so it cannot update an official-signature install. The Messenger APK re-signed for the emulator is test-only and is not included as a release artifact.
 
+### E-010 — Patched Facebook feed-filter bytecode
+
+- `source_ref`: generated Facebook 582 `classes2.dex` at `app/build/outputs/fb/Facebook-582-patched.apk`; extracted DEX inspected with IDA session `a464e5a6`.
+- `repro_command`: open the patched `classes2.dex` in IDA and analyze `_1xD.addNewEdgeToCollection@ZLLL` at `0x693888`.
+- `raw_excerpt`:
+  - IDA prototype: `boolean(X.1xD *this, ImmutableList$Builder *p0, GraphQLFeedUnitEdge *p1, X.1aL *p2)`.
+  - The emitted prefix reads `GraphQLFeedUnitEdge.A03()` and `B8S()`. Null edge, feed-unit, or category branches jump to `0x693940`, the original method body.
+  - `GraphQLFBMultiAdsFeedUnit` and enum names `SPONSORED`, `PROMOTION`, `SHOWCASE`, `FIXED_POSITION`, and `HIGH_VALUE_PROMOTION` branch to `0x69393C`, which returns `false` before the builder is mutated.
+  - The `FB_SHORTS` branch requires `GraphQLStory`, calls `LX/3mA.A01(GraphQLStory)`, and returns `false` only when the commerce attachment result is non-null. Other Shorts and other categories continue through the original body.
+- `limitations`: bytecode/control-flow verification is static. A logged-in feed/Reels session is still required to prove Facebook’s live server data reaches these model paths.
+
 ## Findings
 
 ### F-001 — Facebook 582 has a structural feed/Reels/Story Ads patch path
@@ -169,6 +180,7 @@ The product-Reel condition does not scan captions. A Reel that only mentions a p
 - 2026-10-18: supplied APK manifests and DEX tables analyzed; Facebook feed, commerce, Reels, and Story Ads paths traced; Messenger native dispatch candidates inspected with IDA.
 - 2026-10-18: source and DEX patch profile updated; DEX test, clean Android build, unit tests, and lint passed.
 - 2026-10-18: MuMu `emulator-5554` became available. Facebook 582 and Messenger 583 were launched with the LSPosed module enabled; both remained alive at login surfaces. Messenger completed module unobfuscation; no authenticated feed/Reels or receive-event test was available.
+- 2026-10-18: generated Facebook 582 `classes2.dex` reopened in IDA; feed-filter drop and null/model fail-open control flow verified in the emitted bytecode.
 
 ## Runtime limits
 
