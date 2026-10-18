@@ -19,9 +19,6 @@ import tn.amin.mpro2.hook.unobfuscation.OrcaUnobfuscator;
 import tn.amin.mpro2.orca.OrcaGateway;
 
 public class TypingIndicatorSentHook extends BaseHook {
-    private static final int OUTBOUND_TYPING_ACTION_V553 = 91; // 91 in Messenger 576 (was 88)
-    private static final String OUTBOUND_TYPING_METHOD_V553 = "dispatchVOOOZ";
-
     private static final Set<String> KNOWN_TYPING_DISPATCH_METHODS = new HashSet<>(Arrays.asList(
             "dispatchVOOOOZ",
             "dispatchVOOOOZZ",
@@ -46,14 +43,19 @@ public class TypingIndicatorSentHook extends BaseHook {
         Class<?> TypingIndicatorDispatcher = gateway.unobfuscator.getClass(OrcaUnobfuscator.CLASS_TYPING_INDICATOR_DISPATCHER);
         boolean captureDebug = gateway.pref != null && gateway.pref.isTypingCaptureDebugEnabled();
         boolean forceBlock = gateway.pref != null && gateway.pref.isTypingForceBlockEnabled();
+        int orcaVersion = gateway.state != null ? gateway.state.getOrcaVersion() : -1;
         String dispatcherClassName = TypingIndicatorDispatcher != null ? TypingIndicatorDispatcher.getName() : null;
 
-        Logger.info("TypingIndicatorSentHook: captureDebug=" + captureDebug + " forceBlock=" + forceBlock);
+        Logger.info("TypingIndicatorSentHook: captureDebug=" + captureDebug + " forceBlock=" + forceBlock
+                + " orcaVersion=" + orcaVersion);
 
         Set<XC_MethodHook.Unhook> unhooks = new HashSet<>();
-        hookTypingDispatches(unhooks, gateway.classLoader, OrcaClassNames.MAILBOX_SDK_JNI, "SDK", captureDebug, forceBlock, dispatcherClassName);
-        hookTypingDispatches(unhooks, gateway.classLoader, OrcaClassNames.MAILBOX_CORE_JNI, "CORE", captureDebug, forceBlock, dispatcherClassName);
-        hookTypingDispatches(unhooks, gateway.classLoader, "com.facebook.orca.mca.MailboxOrcaJNI", "ORCA", captureDebug, forceBlock, dispatcherClassName);
+        hookTypingDispatches(unhooks, gateway.classLoader, OrcaClassNames.MAILBOX_SDK_JNI,
+                "SDK", captureDebug, forceBlock, orcaVersion, dispatcherClassName);
+        hookTypingDispatches(unhooks, gateway.classLoader, OrcaClassNames.MAILBOX_CORE_JNI,
+                "CORE", captureDebug, forceBlock, orcaVersion, dispatcherClassName);
+        hookTypingDispatches(unhooks, gateway.classLoader, "com.facebook.orca.mca.MailboxOrcaJNI",
+                "ORCA", captureDebug, forceBlock, orcaVersion, dispatcherClassName);
 
         if (TypingIndicatorDispatcher != null) {
             int dispatcherHooks = 0;
@@ -93,7 +95,7 @@ public class TypingIndicatorSentHook extends BaseHook {
     }
 
     private void hookTypingDispatches(Set<XC_MethodHook.Unhook> unhooks, ClassLoader classLoader, String className,
-                                      String tag, boolean captureDebug, boolean forceBlock,
+                                      String tag, boolean captureDebug, boolean forceBlock, int orcaVersion,
                                       String dispatcherClassName) {
         Class<?> mailboxClass = findClassOrNull(className, classLoader);
         if (mailboxClass == null) {
@@ -123,7 +125,7 @@ public class TypingIndicatorSentHook extends BaseHook {
                     // Enforce blocking only on the known outbound typing signature.
                     // Combined with targeted boolean mutation, this avoids broad side effects.
                     boolean allowBlockOnThisPath = forceBlock
-                            || isKnownOutboundTypingDispatch(tag, method.getName(), param.args);
+                            || isKnownOutboundTypingDispatch(tag, method.getName(), param.args, orcaVersion);
                     if (!allowBlockOnThisPath) return;
 
                     if (captureDebug && !forceBlock && shouldLogCapture()) {
@@ -138,7 +140,8 @@ public class TypingIndicatorSentHook extends BaseHook {
                         if (forceBlock) {
                             changed = forceBooleanArgsFalse(param.args);
                         } else {
-                            changed = suppressKnownOutboundTypingCall(param, tag, method.getName(), param.args);
+                            changed = suppressKnownOutboundTypingCall(
+                                    param, tag, method.getName(), param.args, orcaVersion);
                         }
                         if (!changed) {
                             Logger.warn("TypingIndicatorSentHook: skip block (no safe target) "
@@ -252,13 +255,12 @@ public class TypingIndicatorSentHook extends BaseHook {
                 continue;
             }
 
-            String cls = arg.getClass().getSimpleName();
-            sb.append(i).append(":").append(cls).append("=");
+            Class<?> argClass = arg.getClass();
+            sb.append(i).append(":").append(argClass.getSimpleName());
             if (arg instanceof String) {
-                String s = (String) arg;
-                sb.append('"').append(trimForLog(s, 40)).append('"');
-            } else {
-                sb.append(trimForLog(String.valueOf(arg), 32));
+                sb.append("(length=").append(((String) arg).length()).append(")");
+            } else if (argClass.isArray()) {
+                sb.append("(length=").append(java.lang.reflect.Array.getLength(arg)).append(")");
             }
         }
         sb.append("]");
@@ -270,43 +272,20 @@ public class TypingIndicatorSentHook extends BaseHook {
         return args[0];
     }
 
-    private String trimForLog(String value, int max) {
-        if (value == null) return "null";
-        if (value.length() <= max) return value;
-        return value.substring(0, max) + "...";
-    }
-
-    private boolean isKnownOutboundTypingDispatch(String tag, String methodName, Object[] args) {
-        if (!"SDK".equals(tag)) return false;
-        if (!OUTBOUND_TYPING_METHOD_V553.equals(methodName)) return false;
+    private boolean isKnownOutboundTypingDispatch(String tag, String methodName, Object[] args,
+                                                  int orcaVersion) {
         Integer actionCode = getActionCodeInt(args);
-        if (actionCode == null || actionCode != OUTBOUND_TYPING_ACTION_V553) return false;
-        return isThreadScopedTypingArgs(args);
+        return actionCode != null && MailboxIndicatorDispatchPolicy.isKnownOutboundTypingDispatch(
+                tag, methodName, actionCode, isThreadScopedTypingArgs(args), orcaVersion);
     }
 
     private boolean isThreadScopedTypingArgs(Object[] args) {
-        if (args == null || args.length < 5) return false;
-
-        Object threadToken = args[2];
-        Object scopeObj = args[3];
-        Object boolObj = args[4];
-
-        if (!(threadToken instanceof String)) return false;
-        String token = (String) threadToken;
-        if (!token.startsWith("T_")) return false;
-
-        if (scopeObj == null) return false;
-        String scopeClass = scopeObj.getClass().getName();
-        if (!scopeClass.equals(OrcaClassNames.NOTIFICATION_SCOPE)
-                && !scopeClass.contains("NotificationScope")) {
-            return false;
-        }
-
-        return Boolean.TRUE.equals(boolObj);
+        return MailboxIndicatorDispatchPolicy.hasThreadScopedTypingPayload(args);
     }
 
-    private boolean suppressKnownOutboundTypingCall(XC_MethodHook.MethodHookParam param, String tag, String methodName, Object[] args) {
-        if (!isKnownOutboundTypingDispatch(tag, methodName, args)) return false;
+    private boolean suppressKnownOutboundTypingCall(XC_MethodHook.MethodHookParam param, String tag,
+                                                    String methodName, Object[] args, int orcaVersion) {
+        if (!isKnownOutboundTypingDispatch(tag, methodName, args, orcaVersion)) return false;
         Method hookedMethod = (Method) param.method;
         param.setResult(defaultReturnValue(hookedMethod.getReturnType()));
         return true;

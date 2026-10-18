@@ -19,6 +19,8 @@ import tn.amin.mpro2.orca.OrcaGateway;
 public class SeenIndicatorHook extends BaseHook {
     private static final int ACTION_TYPING_SUBSCRIPTION = 81;
     private static final int ACTION_TYPING_OUTBOUND_V553 = 91; // 91 in Messenger 576 (was 88)
+    private static final int ACTION_TYPING_OUTBOUND_V583 =
+            MailboxIndicatorDispatchPolicy.ORCA_583_TYPING_ACTION;
     private static final int ACTION_SEEN_DISPATCH_V553 = 62;
     private static final int ACTION_SEEN_DISPATCH_V576 = 84;
     private static final int ACTION_MARK_READ_DISPATCH_V553 = 23;
@@ -47,8 +49,12 @@ public class SeenIndicatorHook extends BaseHook {
     @Override
     protected Set<XC_MethodHook.Unhook> injectInternal(OrcaGateway gateway) {
         final boolean captureDebug = gateway.pref != null && gateway.pref.isTypingCaptureDebugEnabled();
-        final int configuredSeenApiCode = gateway.unobfuscator.getAPICode(OrcaUnobfuscator.API_MESSAGE_SEEN);
-        Logger.info("SeenIndicatorHook: configured legacy seen apiCode=" + configuredSeenApiCode);
+        final int orcaVersion = gateway.state != null ? gateway.state.getOrcaVersion() : -1;
+        Integer storedSeenApiCode = gateway.unobfuscator.getAPICode(OrcaUnobfuscator.API_MESSAGE_SEEN);
+        final int configuredSeenApiCode = MailboxIndicatorDispatchPolicy.resolveLegacySeenActionCode(
+                orcaVersion, storedSeenApiCode == null ? -1 : storedSeenApiCode);
+        Logger.info("SeenIndicatorHook: configured legacy seen apiCode=" + configuredSeenApiCode
+                + " orcaVersion=" + orcaVersion);
         var wrapped = wrap(new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -79,6 +85,21 @@ public class SeenIndicatorHook extends BaseHook {
                 boolean hasBoolean = hasBooleanArg(param.args);
                 boolean excludedAction = isExcludedActionCode(actionCode);
 
+                // Orca 583's markAsReadThreadWithThreadIdentifier uses an object-only
+                // dispatchVOOOOO payload, so the older fallback requiring a boolean misses it.
+                boolean matchesMessenger583MarkRead = MailboxIndicatorDispatchPolicy
+                        .isMessenger583MarkReadDispatch(
+                                orcaVersion,
+                                actionCode,
+                                OrcaClassNames.MAILBOX_SDK_JNI.equals(
+                                        ((Method) param.method).getDeclaringClass().getName()),
+                                methodName,
+                                param.args.length,
+                                isMailboxArg(param.args[1]),
+                                hasLongArg(param.args),
+                                countStringArgs(param.args),
+                                hasNotificationScope);
+
                 // Version-resilient fallback for "seen-like" thread-scoped notification dispatches
                 // where action codes can drift between Messenger builds.
                 boolean matchesThreadScopedSeenFallback = !excludedAction
@@ -105,7 +126,8 @@ public class SeenIndicatorHook extends BaseHook {
                 boolean matchesSeen = matchesLegacySeen
                         || matchesThreadScopedSeenFallback
                         || matchesCompactMarkReadFallback
-                        || matchesV576Seen;
+                        || matchesV576Seen
+                        || matchesMessenger583MarkRead;
 
                 if (matchesSeen) {
                     notifyListenersWithResult((listener) -> ((SeenIndicatorListener) listener).onSeenIndicator());
@@ -188,7 +210,8 @@ public class SeenIndicatorHook extends BaseHook {
                 || actionCode == ACTION_MESSAGE_SEND_V552
                 || actionCode == ACTION_MESSAGE_SEND_V553
                 || actionCode == ACTION_MESSAGE_SEND_V576
-                || actionCode == ACTION_TYPING_OUTBOUND_V553;
+                || actionCode == ACTION_TYPING_OUTBOUND_V553
+                || actionCode == ACTION_TYPING_OUTBOUND_V583;
     }
 
     private synchronized boolean shouldLogDebugMiss() {
@@ -250,6 +273,23 @@ public class SeenIndicatorHook extends BaseHook {
         return false;
     }
 
+    private boolean hasLongArg(Object[] args) {
+        if (args == null) return false;
+        for (int i = 1; i < args.length; i++) {
+            if (args[i] instanceof Long) return true;
+        }
+        return false;
+    }
+
+    private int countStringArgs(Object[] args) {
+        if (args == null) return 0;
+        int count = 0;
+        for (int i = 1; i < args.length; i++) {
+            if (args[i] instanceof String) count++;
+        }
+        return count;
+    }
+
     private String summarizeArgs(Object[] args) {
         if (args == null) return "[]";
 
@@ -261,9 +301,9 @@ public class SeenIndicatorHook extends BaseHook {
                 sb.append(i).append(":null");
             } else {
                 sb.append(i).append(":").append(arg.getClass().getSimpleName());
-                String text = String.valueOf(arg);
-                if (text.length() > 36) text = text.substring(0, 36) + "...";
-                sb.append("=").append(text);
+                if (arg instanceof String) {
+                    sb.append("(length=").append(((String) arg).length()).append(")");
+                }
             }
         }
         sb.append("]");
