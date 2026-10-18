@@ -53,7 +53,7 @@ public class KatanaUnobfuscator {
     /**
      * Find the story "seen" mutation builder entry method.
      * <p>
-     * The method (X.BII.A00 in build 474227017) is the void entry that builds and
+     * The method (X.BFm.A00 in build 475417168) is the void entry that builds and
      * sends the DirectSeenMutation. Anchors:
      * <ul>
      *   <li>class references the stable string {@code "surface=story_viewer"}.</li>
@@ -61,22 +61,42 @@ public class KatanaUnobfuscator {
      * </ul>
      */
     public Method loadStorySeenBuilderMethod() {
+        MethodData methodData = findStorySeenBuilderMethodData(mDexplore);
+        if (methodData == null) {
+            Logger.error("KatanaUnobfuscator: direct Story seen mutation entry not found");
+            return null;
+        }
+        Method method = methodData.loadMethod(mClassLoader);
+        if (method == null || !FacebookStorySeenFingerprint.isDirectStorySeenEntry(
+                method.getReturnType() == Void.TYPE ? "V" : method.getReturnType().getName(),
+                method.getParameterTypes().length,
+                true)) {
+            Logger.error("KatanaUnobfuscator: direct Story seen entry failed signature validation: "
+                    + methodData.getSignature());
+            return null;
+        }
+        return method;
+    }
+
+    static MethodData findStorySeenBuilderMethodData(Dexplore dexplore) {
         ClassFilter classFilter = new ClassFilter.Builder()
                 .setReferenceTypes(ReferenceTypes.builder().addString().build())
-                .setReferenceFilter(pool -> pool.stringsContain("surface=story_viewer"))
+                .setReferenceFilter(pool -> FacebookStorySeenFingerprint.isDirectStorySeenMutationClass(
+                        pool.stringsContain("surface=story_viewer"),
+                        pool.stringsContain("story_ids_list"),
+                        pool.stringsContain("is_story_peek_view"),
+                        pool.stringsContain("bucket_to_story_card_id_filters"),
+                        pool.stringsContain("type=mutation")))
                 .build();
 
         MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReturnType("void")
+                .setParamSize(8)
                 .setReferenceTypes(ReferenceTypes.builder().addMethodWithDetails().build())
                 .setReferenceFilter(pool -> pool.methodSignaturesContain("getRequest"))
                 .build();
 
-        MethodData methodData = mDexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
-        if (methodData == null) {
-            Logger.error("KatanaUnobfuscator: story seen builder method not found");
-            return null;
-        }
-        return methodData.loadMethod(mClassLoader);
+        return dexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
     }
 
     /**
@@ -92,6 +112,7 @@ public class KatanaUnobfuscator {
                 .build();
 
         MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReturnType("int")
                 .setReferenceTypes(ReferenceTypes.builder().addString().build())
                 .setReferenceFilter(pool -> pool.stringsContain("setStorySeenInternal"))
                 .build();
@@ -101,13 +122,101 @@ public class KatanaUnobfuscator {
             Logger.error("KatanaUnobfuscator: story seen local method not found");
             return null;
         }
-        return methodData.loadMethod(mClassLoader);
+        Method method = methodData.loadMethod(mClassLoader);
+        if (method == null || !FacebookStorySeenFingerprint.isLocalStorySeenWriter(
+                true, method.getReturnType() == Integer.TYPE ? "I" : method.getReturnType().getName())) {
+            Logger.error("KatanaUnobfuscator: story seen local method failed signature validation: "
+                    + methodData.getSignature());
+            return null;
+        }
+        return method;
+    }
+
+    /**
+     * Find the Story seen-receipts mutation sender. The constructor named
+     * StorySeenReceiptsSeenTimeUpdateMutation only describes the GraphQL model;
+     * BQU.A0I is the void entry which builds and submits it.
+     */
+    public Method loadStorySeenReceiptsEntryMethod() {
+        MethodData methodData = findStorySeenReceiptsEntryMethodData(mDexplore);
+        if (methodData == null) {
+            Logger.error("KatanaUnobfuscator: Story seen-receipts sender not found");
+            return null;
+        }
+
+        Method method = methodData.loadMethod(mClassLoader);
+        if (method == null || method.getReturnType() != Void.TYPE || method.getParameterTypes().length != 4) {
+            Logger.error("KatanaUnobfuscator: Story seen-receipts sender failed signature validation: "
+                    + methodData.getSignature());
+            return null;
+        }
+        return method;
+    }
+
+    static MethodData findStorySeenReceiptsEntryMethodData(Dexplore dexplore) {
+        ClassFilter classFilter = new ClassFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("actor_id")
+                        && pool.stringsContain("time")
+                        && pool.stringsContain("story_id")
+                        && pool.stringsContain("seen_receipts_unseen_count"))
+                .build();
+
+        MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReturnType("void")
+                .setParamSize(4)
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> FacebookStorySeenFingerprint.isStorySeenReceiptsEntry(
+                        pool.stringsContain("actor_id"),
+                        pool.stringsContain("time"),
+                        pool.stringsContain("story_id"),
+                        pool.stringsContain("seen_receipts_unseen_count"),
+                        "V",
+                        4))
+                .build();
+
+        return dexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
+    }
+
+    /** Find the narrowly scoped FeedCSR story-seen callback (void(String)). */
+    public Method loadStorySeenCsrCallbackMethod() {
+        ClassFilter classFilter = new ClassFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("FeedCSRStorageHandlerImpl"))
+                .build();
+
+        MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReturnType("void")
+                .setParamSize(1)
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> pool.stringsContain("setStorySeen"))
+                .build();
+
+        MethodData methodData = mDexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
+        if (methodData == null) {
+            Logger.error("KatanaUnobfuscator: FeedCSR setStorySeen callback not found");
+            return null;
+        }
+
+        Method method = methodData.loadMethod(mClassLoader);
+        if (method == null || !FacebookStorySeenFingerprint.isStorySeenCsrCallback(
+                true,
+                true,
+                method.getReturnType().getName().equals("void") ? "V" : method.getReturnType().getName(),
+                method.getParameterTypes().length == 1
+                        ? method.getParameterTypes()[0].getName() : "",
+                method.getParameterTypes().length)) {
+            Logger.error("KatanaUnobfuscator: FeedCSR setStorySeen callback failed signature validation: "
+                    + methodData.getSignature());
+            return null;
+        }
+        return method;
     }
 
     /**
      * Generic lookup: find the first method whose class AND method reference the given
-     * EXACT string constant. Used for additional "seen" seams (e.g. "setStorySeen",
-     * "StorySeenReceiptsSeenTimeUpdateMutation").
+     * exact string constant. This only resolves reflectively invocable methods; a
+     * constructor anchor will not produce a {@link Method}.
      */
     public Method loadMethodByStringAnchor(String anchor) {
         ClassFilter classFilter = new ClassFilter.Builder()
@@ -129,8 +238,7 @@ public class KatanaUnobfuscator {
     }
 
     /**
-     * Generic class lookup by EXACT string anchor (for hooking a whole class, e.g. the
-     * StoryViewerSeenHelper X.BF6 via "found_aggregated_bucket").
+     * Generic class lookup by an exact string anchor.
      */
     public Class<?> loadClassByStringAnchor(String anchor) {
         ClassFilter classFilter = new ClassFilter.Builder()
@@ -159,7 +267,7 @@ public class KatanaUnobfuscator {
                 .build();
 
         MethodFilter methodFilter = new MethodFilter.Builder()
-                .setReturnType("V")
+                .setReturnType("void")
                 .setParamSize(4)
                 .setReferenceTypes(ReferenceTypes.builder().addString().build())
                 .setReferenceFilter(pool -> pool.stringsContain("AdBreakServerAPI"))
@@ -230,7 +338,7 @@ public class KatanaUnobfuscator {
                 .build();
 
         MethodFilter methodFilter = new MethodFilter.Builder()
-                .setReturnType("V")
+                .setReturnType("void")
                 .setParamSize(1)
                 .setReferenceTypes(ReferenceTypes.builder().addString().build())
                 .setReferenceFilter(pool -> pool.stringsContain("fetchMoreAds"))

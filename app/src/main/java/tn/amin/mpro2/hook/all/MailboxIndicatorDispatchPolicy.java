@@ -63,10 +63,23 @@ final class MailboxIndicatorDispatchPolicy {
         return hasThreadIdentifier && hasNotificationScope;
     }
 
+    static boolean hasNullableLongIdentifierAtSlot(Object[] args, Class<?>[] parameterTypes, int slot) {
+        if (args == null || parameterTypes == null || args.length != parameterTypes.length
+                || slot < 0 || slot >= args.length) {
+            return false;
+        }
+
+        // Mailbox dispatchers expose payloads as Object in the DEX signature even when a
+        // specific action carries a nullable Long in this slot.
+        boolean compatibleDeclaredType = Long.class.equals(parameterTypes[slot])
+                || Object.class.equals(parameterTypes[slot]);
+        return compatibleDeclaredType && (args[slot] == null || args[slot] instanceof Long);
+    }
+
     static boolean isMessenger583MarkReadDispatch(int orcaVersion, int actionCode,
                                                    boolean sdkMailbox, String methodName,
                                                    int argumentCount,
-                                                   boolean hasMailbox, boolean hasLongIdentifier,
+                                                   boolean hasMailbox, boolean hasNullableLongIdentifier,
                                                    int stringIdentifierCount,
                                                    boolean hasNotificationScope) {
         return orcaVersion == ORCA_583_VERSION
@@ -75,7 +88,7 @@ final class MailboxIndicatorDispatchPolicy {
                 && ORCA_583_MARK_READ_METHOD.equals(methodName)
                 && argumentCount == 6
                 && hasMailbox
-                && hasLongIdentifier
+                && hasNullableLongIdentifier
                 && stringIdentifierCount >= 1
                 && hasNotificationScope;
     }

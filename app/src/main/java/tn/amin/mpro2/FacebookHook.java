@@ -14,6 +14,7 @@ import tn.amin.mpro2.debug.Logger;
 import tn.amin.mpro2.hook.unobfuscation.KatanaUnobfuscator;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Facebook (com.facebook.katana) patches.
@@ -29,6 +30,8 @@ import java.lang.reflect.Method;
  */
 public class FacebookHook {
     public static final String FACEBOOK_PACKAGE = "com.facebook.katana";
+    private static final int STORY_SUPPRESSION_LOG_LIMIT = 20;
+    private static final AtomicInteger STORY_SUPPRESSION_LOG_COUNT = new AtomicInteger();
 
     public static void install(final XC_LoadPackage.LoadPackageParam lpparam) {
         Log.e("MProFB", "install() called");
@@ -72,18 +75,24 @@ public class FacebookHook {
         }
         Log.e("MProFB", "installAllHooks dexPath=" + dexPath);
         if (dexPath == null) {
-            toast(context, "MPro FB: KHONG tim thay superpack dex");
+            Logger.warn("FacebookHook: no Superpack DEX or APK source available");
+            toast(context, "MPro FB: khong tim thay DEX");
             return;
         }
         try {
+            long startedAt = System.currentTimeMillis();
+            Logger.info("FacebookHook: indexing Story seen targets from "
+                    + (dexPath.equals(sourceDir) ? "installed APK" : "Superpack DEX"));
             KatanaUnobfuscator unobfuscator = new KatanaUnobfuscator(dexPath, classLoader);
+            Logger.info("FacebookHook: Story seen DEX index ready in "
+                    + (System.currentTimeMillis() - startedAt) + "ms");
             int ok = 0;
             if (installStorySeenBlock(unobfuscator)) ok++;
             if (installStorySeenLocalBlock(unobfuscator)) ok++;
             if (installStorySeenSyncBlock(unobfuscator)) ok++;
             if (installStorySeenReceiptsBlock(unobfuscator)) ok++;
-            if (installStoryViewerSeenHelperBlock(unobfuscator)) ok++;
-            toast(context, "MPro FB: da cai " + ok + " hooks (story)");
+            Logger.info("FacebookHook: installed " + ok + "/4 targeted Story seen hooks");
+            toast(context, "MPro FB: da cai " + ok + "/4 story hooks");
         } catch (Throwable t) {
             Log.e("MProFB", "unobfuscation failed: " + t, t);
             toast(context, "MPro FB: LOI " + t.getMessage());
@@ -102,15 +111,28 @@ public class FacebookHook {
     private static boolean installStorySeenBlock(KatanaUnobfuscator unobfuscator) {
         try {
             Method method = unobfuscator.loadStorySeenBuilderMethod();
-            if (method == null) return false;
+            if (method == null) {
+                Logger.warn("FacebookHook: direct Story seen entry not found");
+                return false;
+            }
+            if (method.getReturnType() != Void.TYPE) {
+                Logger.warn("FacebookHook: reject direct Story seen target with non-void return: "
+                        + describeMethod(method));
+                return false;
+            }
+            Logger.info("FacebookHook: resolved direct Story seen entry " + describeMethod(method));
             XposedBridge.hookMethod(method, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     param.setResult(null);
+                    logStorySuppression("direct mutation");
                 }
             });
+            Logger.info("FacebookHook: installed direct Story seen hook");
             return true;
         } catch (Throwable t) {
+            Logger.warn("FacebookHook: direct Story seen hook failed: " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage());
             return false;
         }
     }
@@ -118,67 +140,99 @@ public class FacebookHook {
     private static boolean installStorySeenLocalBlock(KatanaUnobfuscator unobfuscator) {
         try {
             Method method = unobfuscator.loadStorySeenLocalMethod();
-            if (method == null) return false;
+            if (method == null) {
+                Logger.warn("FacebookHook: local Story seen writer not found");
+                return false;
+            }
+            if (method.getReturnType() != Integer.TYPE) {
+                Logger.warn("FacebookHook: reject local Story seen target with non-int return: "
+                        + describeMethod(method));
+                return false;
+            }
+            Logger.info("FacebookHook: resolved local Story seen writer " + describeMethod(method));
             XposedBridge.hookMethod(method, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     param.setResult(0);
+                    logStorySuppression("local state");
                 }
             });
+            Logger.info("FacebookHook: installed local Story seen hook");
             return true;
         } catch (Throwable t) {
+            Logger.warn("FacebookHook: local Story seen hook failed: " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage());
             return false;
         }
     }
 
     private static boolean installStorySeenSyncBlock(KatanaUnobfuscator unobfuscator) {
         try {
-            Method method = unobfuscator.loadMethodByStringAnchor("setStorySeen");
-            if (method == null) return false;
+            Method method = unobfuscator.loadStorySeenCsrCallbackMethod();
+            if (method == null) {
+                Logger.warn("FacebookHook: FeedCSR Story seen callback not found");
+                return false;
+            }
+            Logger.info("FacebookHook: resolved FeedCSR Story seen callback " + describeMethod(method));
             XposedBridge.hookMethod(method, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     param.setResult(null);
+                    logStorySuppression("FeedCSR callback");
                 }
             });
+            Logger.info("FacebookHook: installed FeedCSR Story seen hook");
             return true;
         } catch (Throwable t) {
+            Logger.warn("FacebookHook: FeedCSR Story seen hook failed: " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage());
             return false;
         }
     }
 
     private static boolean installStorySeenReceiptsBlock(KatanaUnobfuscator unobfuscator) {
         try {
-            Method method = unobfuscator.loadMethodByStringAnchor("StorySeenReceiptsSeenTimeUpdateMutation");
-            if (method == null) return false;
+            Method method = unobfuscator.loadStorySeenReceiptsEntryMethod();
+            if (method == null) {
+                Logger.warn("FacebookHook: Story seen-receipts mutation entry not found");
+                return false;
+            }
+            if (method.getReturnType() != Void.TYPE) {
+                Logger.warn("FacebookHook: reject Story seen-receipts target with non-void return: "
+                        + describeMethod(method));
+                return false;
+            }
+            Logger.info("FacebookHook: resolved Story seen-receipts entry " + describeMethod(method));
             XposedBridge.hookMethod(method, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     param.setResult(null);
+                    logStorySuppression("receipt mutation");
                 }
             });
+            Logger.info("FacebookHook: installed Story seen-receipts hook");
             return true;
         } catch (Throwable t) {
+            Logger.warn("FacebookHook: Story seen-receipts hook failed: " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage());
             return false;
         }
     }
 
-    private static boolean installStoryViewerSeenHelperBlock(KatanaUnobfuscator unobfuscator) {
-        try {
-            Class<?> seenHelperClass = unobfuscator.loadClassByStringAnchor("found_aggregated_bucket");
-            if (seenHelperClass == null) return false;
-            for (Method method : seenHelperClass.getDeclaredMethods()) {
-                if (method.getName().startsWith("<")) continue;
-                XposedBridge.hookMethod(method, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        param.setResult(null);
-                    }
-                });
-            }
-            return true;
-        } catch (Throwable t) {
-            return false;
+    private static String describeMethod(Method method) {
+        StringBuilder signature = new StringBuilder(method.getDeclaringClass().getName())
+                .append('#').append(method.getName()).append('(');
+        Class<?>[] parameterTypes = method.getParameterTypes();
+        for (int i = 0; i < parameterTypes.length; i++) {
+            if (i > 0) signature.append(',');
+            signature.append(parameterTypes[i].getName());
+        }
+        return signature.append(")->").append(method.getReturnType().getName()).toString();
+    }
+
+    private static void logStorySuppression(String target) {
+        if (STORY_SUPPRESSION_LOG_COUNT.getAndIncrement() < STORY_SUPPRESSION_LOG_LIMIT) {
+            Logger.info("FacebookHook: suppressed Story seen via " + target);
         }
     }
 

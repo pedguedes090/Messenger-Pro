@@ -32,9 +32,9 @@ public class SeenIndicatorHook extends BaseHook {
     private static final int ACTION_MESSAGE_SEND_V553 = 71;
     private static final int ACTION_MESSAGE_SEND_V576 = 74;
     private static final String MAILBOX_ORCA_JNI = "com.facebook.orca.mca.MailboxOrcaJNI";
-    private static final int DEBUG_MISS_LOG_LIMIT = 200;
+    private static final int DEBUG_DISPATCH_LOG_LIMIT = 200;
 
-    private int mDebugMissLogCount = 0;
+    private int mDebugDispatchLogCount = 0;
 
     @Override
     public HookId getId() {
@@ -58,7 +58,9 @@ public class SeenIndicatorHook extends BaseHook {
         var wrapped = wrap(new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                String methodName = ((Method) param.method).getName();
+                Method dispatchedMethod = (Method) param.method;
+                String methodName = dispatchedMethod.getName();
+                String declaringClassName = dispatchedMethod.getDeclaringClass().getName();
                 Integer actionCode = (param.args != null && param.args.length > 0 && param.args[0] instanceof Integer)
                         ? (Integer) param.args[0]
                         : null;
@@ -91,12 +93,12 @@ public class SeenIndicatorHook extends BaseHook {
                         .isMessenger583MarkReadDispatch(
                                 orcaVersion,
                                 actionCode,
-                                OrcaClassNames.MAILBOX_SDK_JNI.equals(
-                                        ((Method) param.method).getDeclaringClass().getName()),
+                                OrcaClassNames.MAILBOX_SDK_JNI.equals(declaringClassName),
                                 methodName,
                                 param.args.length,
                                 isMailboxArg(param.args[1]),
-                                hasLongArg(param.args),
+                                MailboxIndicatorDispatchPolicy.hasNullableLongIdentifierAtSlot(
+                                        param.args, dispatchedMethod.getParameterTypes(), 3),
                                 countStringArgs(param.args),
                                 hasNotificationScope);
 
@@ -132,15 +134,24 @@ public class SeenIndicatorHook extends BaseHook {
                 if (matchesSeen) {
                     notifyListenersWithResult((listener) -> ((SeenIndicatorListener) listener).onSeenIndicator());
                     boolean allowSeen = !getListenersReturnValue().isConsumed || (Boolean) getListenersReturnValue().value;
+                    if (captureDebug && shouldLogDebugDispatch()) {
+                        Logger.info("SeenIndicatorHook: matched mailbox dispatch class=" + declaringClassName
+                                + " method=" + methodName
+                                + " action=" + actionCode
+                                + " decision=" + (allowSeen ? "allow" : "suppress")
+                                + " args=" + summarizeArgs(param.args));
+                    }
                     if (!allowSeen) {
-                        Logger.verbose("SeenIndicatorHook: blocked seen dispatch method=" + methodName
+                        Logger.verbose("SeenIndicatorHook: blocked seen dispatch class=" + declaringClassName
+                                + " method=" + methodName
                                 + " action=" + actionCode
                                 + " args=" + summarizeArgs(param.args));
                         Method hookedMethod = (Method) param.method;
                         param.setResult(getDefaultReturnValue(hookedMethod.getReturnType()));
                     }
-                } else if (captureDebug && shouldLogDebugMiss()) {
-                    Logger.info("SeenIndicatorHook: unmatched mailbox dispatch method=" + methodName
+                } else if (captureDebug && shouldLogDebugDispatch()) {
+                    Logger.info("SeenIndicatorHook: unmatched mailbox dispatch class=" + declaringClassName
+                            + " method=" + methodName
                             + " action=" + actionCode
                             + " args=" + summarizeArgs(param.args));
                 }
@@ -214,9 +225,9 @@ public class SeenIndicatorHook extends BaseHook {
                 || actionCode == ACTION_TYPING_OUTBOUND_V583;
     }
 
-    private synchronized boolean shouldLogDebugMiss() {
-        if (mDebugMissLogCount >= DEBUG_MISS_LOG_LIMIT) return false;
-        mDebugMissLogCount++;
+    private synchronized boolean shouldLogDebugDispatch() {
+        if (mDebugDispatchLogCount >= DEBUG_DISPATCH_LOG_LIMIT) return false;
+        mDebugDispatchLogCount++;
         return true;
     }
 
@@ -270,14 +281,6 @@ public class SeenIndicatorHook extends BaseHook {
             }
         }
 
-        return false;
-    }
-
-    private boolean hasLongArg(Object[] args) {
-        if (args == null) return false;
-        for (int i = 1; i < args.length; i++) {
-            if (args[i] instanceof Long) return true;
-        }
         return false;
     }
 

@@ -26,6 +26,45 @@ public class MailboxIndicatorDispatchPolicyTest {
     }
 
     @Test
+    public void recognizesMessenger583MarkReadWhenOptionalLongIdentifierIsNull() {
+        Object[] args = {88, new Object(), "thread-id", null, "operation", new NotificationScopeProbe()};
+        Class<?>[] parameterTypes = {
+                int.class, Object.class, String.class, Object.class, String.class, NotificationScopeProbe.class
+        };
+        boolean nullableLongIdentifier = MailboxIndicatorDispatchPolicy
+                .hasNullableLongIdentifierAtSlot(args, parameterTypes, 3);
+
+        assertTrue(MailboxIndicatorDispatchPolicy.isMessenger583MarkReadDispatch(
+                ORCA_583, 88, true, "dispatchVOOOOO", 6, true, nullableLongIdentifier, 2, true));
+    }
+
+    @Test
+    public void allowsNullReadIdentifierInGenericObjectSlotButRejectsUnrelatedValues() {
+        Object[] nullIdentifierArgs = {88, new Object(), "thread-id", null, "operation", new NotificationScopeProbe()};
+        Object[] longIdentifierArgs = {
+                88, new Object(), "thread-id", Long.valueOf(7), "operation", new NotificationScopeProbe()
+        };
+        Class<?>[] genericObjectParameters = {
+                int.class, Object.class, String.class, Object.class, String.class, NotificationScopeProbe.class
+        };
+        Object[] unrelatedIdentifierArgs = {
+                88, new Object(), "thread-id", "not-a-long", "operation", new NotificationScopeProbe()
+        };
+        Class<?>[] stringParameters = {
+                int.class, Object.class, String.class, String.class, String.class, NotificationScopeProbe.class
+        };
+
+        assertTrue(MailboxIndicatorDispatchPolicy.hasNullableLongIdentifierAtSlot(
+                nullIdentifierArgs, genericObjectParameters, 3));
+        assertTrue(MailboxIndicatorDispatchPolicy.hasNullableLongIdentifierAtSlot(
+                longIdentifierArgs, genericObjectParameters, 3));
+        assertFalse(MailboxIndicatorDispatchPolicy.hasNullableLongIdentifierAtSlot(
+                nullIdentifierArgs, stringParameters, 3));
+        assertFalse(MailboxIndicatorDispatchPolicy.hasNullableLongIdentifierAtSlot(
+                unrelatedIdentifierArgs, genericObjectParameters, 3));
+    }
+
+    @Test
     public void recognizesMessenger583MarkReadDispatchWithoutBooleanPayload() {
         assertTrue(MailboxIndicatorDispatchPolicy.isMessenger583MarkReadDispatch(
                 ORCA_583, 88, true, "dispatchVOOOOO", 6, true, true, 1, true));
