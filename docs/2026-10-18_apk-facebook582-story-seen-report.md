@@ -3,11 +3,11 @@
 > Analysis date: 2026-10-18
 > Flavor: null — authorized APK reverse engineering and source compatibility work.
 > Scope and authorization: [scope summary](2026-10-18_apk-facebook582-story-seen-scope.md).
-> Result status: target resolution and build are statically verified; live Story receipt suppression was not tested.
+> Result status: target resolution/build are verified; one MuMu Story runtime exercised the direct mutation and local-state blockers. The receipt-sender callback and Reels product overlay still need runtime observation.
 
 ## Executive summary
 
-Facebook 582 has more than one Story “seen” path: a direct `DirectSeenMutation`, a seen-receipts mutation, a feed CSR callback, and a local state writer. The previous receipt hook searched for the GraphQL model name `StorySeenReceiptsSeenTimeUpdateMutation`, which resolves to a constructor and is not loadable as a reflective `Method`; the actual sender is `X.BQU.A0I`. The implementation now resolves the sender by its stable input-field set and validates the method signature, while also tightening the direct mutation and callback selectors. The APK resolvers found all four target methods, and the clean module build, tests, lint, signature check, GitHub release workflow, and Hugging Face uploads succeeded. No logged-in runtime session was used, so this report does not claim that a live Story view was suppressed.
+Facebook 582 has more than one Story “seen” path: a direct `DirectSeenMutation`, a seen-receipts mutation, a feed CSR callback, and a local state writer. The previous receipt hook searched for the GraphQL model name `StorySeenReceiptsSeenTimeUpdateMutation`, which resolves to a constructor and is not loadable as a reflective `Method`; the actual sender is `X.BQU.A0I`. The implementation now resolves the sender by its stable input-field set and validates the method signature, while also tightening the direct mutation and callback selectors. On MuMu, LSPosed installed all four hooks; opening and closing one Story produced suppression logs for the direct mutation and local state writer. The clean module build, tests, lint, signature check, GitHub release workflow, and Hugging Face uploads also succeeded. The receipt-sender callback and Reels product overlay still need runtime observation.
 
 ## Target and source changes
 
@@ -89,6 +89,24 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
 - `raw_excerpt`: all workflow steps succeeded. Release assets contain Facebook 582, Messenger 583, and the local-signed module APK. Bucket entries report the new sizes: Facebook `158536311`, Messenger `168461379`, module `10040746` bytes.
 - `limitations`: bucket metadata and CLI upload completion were checked; no download-back digest verification was run for the three new bucket objects.
 
+### E-007 — MuMu Story runtime dispatch
+
+- `source_ref`: MuMu Android 15 (`emulator-5554`), Facebook 582, MPro 1.2.19, and filtered `LSPosed-Bridge` log output. Device properties and MuMu host processes confirmed this was MuMu; no real phone was used.
+- `repro_command`:
+
+  ```powershell
+  $adb='C:\Users\dun\AppData\Local\Android\Sdk\platform-tools\adb.exe'
+  & $adb -s emulator-5554 shell input tap 410 430
+  & $adb -s emulator-5554 shell input keyevent 4
+  & $adb -s emulator-5554 logcat -d -v time -s LSPosed-Bridge | Select-String 'FacebookHook: suppressed Story seen'
+  ```
+
+- `raw_excerpt`:
+  - `14:57:59.925 ... FacebookHook: suppressed Story seen via direct mutation`
+  - `14:58:41.880`, `.884`, `14:58:42.044`, `.045 ... FacebookHook: suppressed Story seen via local state`
+  - Startup log: `FacebookHook: installed 4/4 targeted Story seen hooks`.
+- `limitations`: one Story was exercised. The log did not show `receipt mutation` or `FeedCSR callback`, and no second account was used to inspect the sender-side viewer list. After closing the Story the foreground activity became `LoginActivity`, which currently blocks the Reels test until the feed is restored.
+
 ## Findings
 
 ### F-001 — The old receipt hook resolved a model constructor, not a sender
@@ -106,11 +124,11 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
 
 - `severity`: n/a_re
 - `category`: reverse_algo
-- `status`: validated (APK resolver and build); live suppression is unverified
-- `evidence_ids`: [E-002, E-003, E-004, E-005]
+- `status`: validated on MuMu for one Story's direct mutation and local-state paths; receipt-sender behavior not observed
+- `evidence_ids`: [E-002, E-003, E-004, E-005, E-007]
 - `location`: `app/src/main/java/tn/amin/mpro2/FacebookHook.java` and `KatanaUnobfuscator.java`
 - `impact`: hooks suppress the direct mutation, receipt sender, CSR state callback, and local seen-state writer. The former hook that returned null from every declared method of a helper class was removed to avoid damaging unrelated Story viewer behavior.
-- `confidence`: high that the target APK resolves to the reported methods; medium/unknown for server-side receipt suppression until a logged-in Story view is observed.
+- `confidence`: high that the direct mutation and local-state hooks fired in the MuMu run; server-side receipt-list outcome and alternate receipt sender behavior remain unverified.
 - `remediation`: on resolver mismatch the hook is skipped, a bounded diagnostic is logged, and Facebook remains fail-open.
 
 ## Call path
@@ -124,8 +142,9 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
   1. Story viewer prepares `DirectSeenMutation` through `BFm.A00` → `BFm.getRequest` — E-002, F-002.
   2. Receipt update is assembled and submitted through `BQU.A0I` — E-003, F-001, F-002.
   3. Feed CSR callback `24A.ExO(String)` and local writer `6ku.A03(...):int` are separately resolved to prevent secondary local state updates — E-004, F-002.
-  4. `FacebookHook` installs only methods that pass the schema and signature checks; missing targets are skipped with diagnostics — E-005, F-002.
-- `residual_risks`: no logged-in runtime session verified that these call paths fire for the user's Stories; a future Facebook schema may change the field set or sender method.
+  4. On MuMu, opening/closing one Story logged suppression through the direct mutation and local state hooks — E-007, F-002.
+  5. `FacebookHook` installs only methods that pass the schema and signature checks; missing targets are skipped with diagnostics — E-005, F-002.
+- `residual_risks`: `BQU.A0I` and `24A.ExO` were installed but did not log invocation in this single Story run; the server-side viewer list was not observed. A future Facebook schema may change the field set or sender method.
 
 ## Timeline and runtime limits
 
@@ -133,5 +152,6 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
 - 2026-10-18: used IDA xrefs/signatures and DEX resolver probes to locate `BFm.A00`, `BQU.A0I`, `6ku.A03`, and `24A.ExO`.
 - 2026-10-18: implemented scoped selectors, removed the all-method helper hook, added bounded diagnostics and fingerprint tests; clean Gradle build, tests, and lint passed.
 - 2026-10-18: pushed commit `859024d`, created release `v1.2.19`, and uploaded the patched APKs and module to Hugging Face.
+- 2026-10-18: installed MPro 1.2.19 on MuMu, confirmed `4/4` Story hooks, opened one Story and observed direct-mutation plus local-state suppression logs. Facebook returned to `LoginActivity` after closing; Reels runtime verification is pending feed access.
 
-No live Facebook Story was opened in this verification pass. Static analysis proves target-method resolution and APK construction, not that the live account/server path is suppressed. A dynamic follow-up would need one test Story view and the bounded `FacebookHook: suppressed Story seen via ...` diagnostic observed; no message body or account data needs to be collected.
+One MuMu Story exercised the direct mutation and local-state blockers. This does not establish the sender-side viewer-list outcome or every Story path. Affiliate/product Reels were not tested because Facebook is currently foregrounded in `LoginActivity`; restoring the logged-in feed is required. No message body, credentials, or account data were logged.
