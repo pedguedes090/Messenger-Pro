@@ -32,6 +32,7 @@ public class FacebookHook {
     public static final String FACEBOOK_PACKAGE = "com.facebook.katana";
     private static final int STORY_SUPPRESSION_LOG_LIMIT = 20;
     private static final AtomicInteger STORY_SUPPRESSION_LOG_COUNT = new AtomicInteger();
+    private static final AtomicInteger STORY_MODEL_SUPPRESSION_LOG_COUNT = new AtomicInteger();
 
     public static void install(final XC_LoadPackage.LoadPackageParam lpparam) {
         Log.e("MProFB", "install() called");
@@ -91,8 +92,9 @@ public class FacebookHook {
             if (installStorySeenLocalBlock(unobfuscator)) ok++;
             if (installStorySeenSyncBlock(unobfuscator)) ok++;
             if (installStorySeenReceiptsBlock(unobfuscator)) ok++;
-            Logger.info("FacebookHook: installed " + ok + "/4 targeted Story seen hooks");
-            toast(context, "MPro FB: da cai " + ok + "/4 story hooks");
+            if (installStorySeenModelStateBlock(unobfuscator)) ok++;
+            Logger.info("FacebookHook: installed " + ok + "/5 targeted Story seen hooks");
+            toast(context, "MPro FB: da cai " + ok + "/5 story hooks");
         } catch (Throwable t) {
             Log.e("MProFB", "unobfuscation failed: " + t, t);
             toast(context, "MPro FB: LOI " + t.getMessage());
@@ -215,6 +217,32 @@ public class FacebookHook {
         } catch (Throwable t) {
             Logger.warn("FacebookHook: Story seen-receipts hook failed: " + t.getClass().getSimpleName()
                     + ": " + t.getMessage());
+            return false;
+        }
+    }
+
+    private static boolean installStorySeenModelStateBlock(KatanaUnobfuscator unobfuscator) {
+        try {
+            Method method = unobfuscator.loadStorySeenModelStateMethod();
+            if (method == null) {
+                Logger.warn("FacebookHook: Story model seen-state entry not found");
+                return false;
+            }
+            Logger.info("FacebookHook: resolved Story model seen-state entry " + describeMethod(method));
+            XposedBridge.hookMethod(method, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    param.setResult(null);
+                    if (STORY_MODEL_SUPPRESSION_LOG_COUNT.getAndIncrement() < STORY_SUPPRESSION_LOG_LIMIT) {
+                        Logger.info("FacebookHook: suppressed Story model seen-state update");
+                    }
+                }
+            });
+            Logger.info("FacebookHook: installed Story model seen-state hook");
+            return true;
+        } catch (Throwable t) {
+            Logger.warn("FacebookHook: Story model seen-state hook failed: "
+                    + t.getClass().getSimpleName() + ": " + t.getMessage());
             return false;
         }
     }

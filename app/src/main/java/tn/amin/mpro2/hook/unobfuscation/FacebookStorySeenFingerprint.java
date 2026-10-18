@@ -36,4 +36,19 @@ final class FacebookStorySeenFingerprint {
     static boolean isLocalStorySeenWriter(boolean setStorySeenInternalAnchor, String returnType) {
         return setStorySeenInternalAnchor && "I".equals(returnType);
     }
+
+    static boolean isStorySeenModelStateEntry(boolean updateSeenStateAnchor,
+                                               boolean primaryKeyAnchor,
+                                               boolean setStoryAsSeenAnchor,
+                                               boolean setStorySeenAnchor,
+                                               boolean updateSeenStateMethodAnchor,
+                                               String returnType,
+                                               String parameterType,
+                                               int parameterCount) {
+        return updateSeenStateAnchor && primaryKeyAnchor && setStoryAsSeenAnchor
+                && setStorySeenAnchor && updateSeenStateMethodAnchor
+                && "V".equals(returnType)
+                && "java.lang.String".equals(parameterType)
+                && parameterCount == 1;
+    }
 }

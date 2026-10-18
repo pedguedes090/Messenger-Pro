@@ -213,6 +213,52 @@ public class KatanaUnobfuscator {
         return method;
     }
 
+    /** Locate Facebook's model/cache transaction that marks a Story as seen. */
+    public Method loadStorySeenModelStateMethod() {
+        ClassFilter classFilter = new ClassFilter.Builder()
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> FacebookStorySeenFingerprint.isStorySeenModelStateEntry(
+                        pool.stringsContain("_updateSeenState"),
+                        pool.stringsContain("primaryKey"),
+                        pool.stringsContain("setStoryAsSeen"),
+                        pool.stringsContain("setStorySeen"),
+                        pool.stringsContain("updateSeenState"),
+                        "V", "java.lang.String", 1))
+                .build();
+
+        MethodFilter methodFilter = new MethodFilter.Builder()
+                .setReturnType("void")
+                .setParamSize(1)
+                .setReferenceTypes(ReferenceTypes.builder().addString().build())
+                .setReferenceFilter(pool -> FacebookStorySeenFingerprint.isStorySeenModelStateEntry(
+                        pool.stringsContain("_updateSeenState"),
+                        pool.stringsContain("primaryKey"),
+                        pool.stringsContain("setStoryAsSeen"),
+                        pool.stringsContain("setStorySeen"),
+                        pool.stringsContain("updateSeenState"),
+                        "V", "java.lang.String", 1))
+                .build();
+
+        MethodData methodData = mDexplore.findMethod(DexFilter.MATCH_ALL, classFilter, methodFilter);
+        if (methodData == null) {
+            Logger.warn("KatanaUnobfuscator: Story model seen-state entry not found");
+            return null;
+        }
+
+        Method method = methodData.loadMethod(mClassLoader);
+        if (method == null || !FacebookStorySeenFingerprint.isStorySeenModelStateEntry(
+                true, true, true, true, true,
+                method.getReturnType() == Void.TYPE ? "V" : method.getReturnType().getName(),
+                method.getParameterTypes().length == 1
+                        ? method.getParameterTypes()[0].getName() : "",
+                method.getParameterTypes().length)) {
+            Logger.warn("KatanaUnobfuscator: Story model seen-state entry failed signature validation: "
+                    + methodData.getSignature());
+            return null;
+        }
+        return method;
+    }
+
     /**
      * Generic lookup: find the first method whose class AND method reference the given
      * exact string constant. This only resolves reflectively invocable methods; a

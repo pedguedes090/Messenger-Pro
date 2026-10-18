@@ -53,4 +53,5 @@ public class FacebookStorySeenFingerprintTest {
         assertFalse(FacebookStorySeenFingerprint.isLocalStorySeenWriter(true, "V"));
         assertFalse(FacebookStorySeenFingerprint.isLocalStorySeenWriter(false, "I"));
     }
+
 }
