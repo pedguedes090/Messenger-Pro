@@ -3,11 +3,11 @@
 > Analysis date: 2026-10-18
 > Flavor: null — authorized APK reverse engineering and source compatibility work.
 > Scope and authorization: [scope summary](2026-10-18_apk-facebook582-story-seen-scope.md).
-> Result status: target resolution/build are verified; MuMu runtime confirms direct-mutation and model/cache suppression for Story seen state. The receipt-sender callback and Reels product overlay still need runtime observation.
+> Result status: target resolution/build are verified; MuMu runtime confirms direct-mutation and model/cache suppression for Story seen state. Shopee-linked Reels remained visible without a separate product card in sampled results; the exact product attachment from the user's screenshot was not found.
 
 ## Executive summary
 
-Facebook 582 has several Story “seen” paths: a direct `DirectSeenMutation`, a seen-receipts mutation, a feed CSR callback, a local database writer, and a model/cache transaction. The previous receipt hook searched for the GraphQL model name `StorySeenReceiptsSeenTimeUpdateMutation`, which resolves to a constructor rather than the sender. Runtime diagnosis found that `X.1yO.A0A(String)` dispatches `setStoryAsSeen` and `updateSeenState`; the previous release let this model/cache transaction continue even when other seen hooks fired. The new release hooks this path by a narrow schema/signature fingerprint. On MuMu, the new hook logged suppression and the tested Story card remained in the feed with its unseen ring. The clean module build, tests, lint, signature check, GitHub release workflow, and Hugging Face uploads succeeded. The server receipt-sender callback and Reels product overlay still need runtime observation.
+Facebook 582 has several Story “seen” paths: a direct `DirectSeenMutation`, a seen-receipts mutation, a feed CSR callback, a local database writer, and a model/cache transaction. The previous receipt hook searched for the GraphQL model name `StorySeenReceiptsSeenTimeUpdateMutation`, which resolves to a constructor rather than the sender. Runtime diagnosis found that `X.1yO.A0A(String)` dispatches `setStoryAsSeen` and `updateSeenState`; the previous release let this model/cache transaction continue even when other seen hooks fired. The new release hooks this path by a narrow schema/signature fingerprint. On MuMu, the new hook logged suppression and the tested Story card remained in the feed with its unseen ring. Shopee-linked Reels sampled on MuMu kept playing and did not show a separate product card, though the exact attachment in the user's screenshot was not found. The clean module build, tests, lint, signature check, GitHub release workflow, and Hugging Face uploads succeeded.
 
 ## Target and source changes
 
@@ -80,7 +80,7 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
   ```
 
 - `raw_excerpt`: `BUILD SUCCESSFUL`; unit tests `15`, failures/errors `0`; `lintDebug` passed. `aapt dump badging` reports module version `1.2.20` / code `37`; `apksigner verify --verbose` reports v2 verification true and exit code `0`.
-- `content_hash`: module APK SHA-256 `2ef2caaceaa12bcf3c2490572c8523cafd2ebafc401020b4b13c2a055bccd57b8`.
+- `content_hash`: module APK SHA-256 `2ef2caacea12bcf3c2490572c8523cafd2beafc401020b4b13c2a055bccd57b8`.
 
 ### E-006 — Published artifacts
 
@@ -105,7 +105,7 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
   - `14:57:59.925 ... FacebookHook: suppressed Story seen via direct mutation`
   - `14:58:41.880`, `.884`, `14:58:42.044`, `.045 ... FacebookHook: suppressed Story seen via local state`
   - Startup log: `FacebookHook: installed 4/4 targeted Story seen hooks`.
-- `limitations`: one Story was exercised. The log did not show `receipt mutation` or `FeedCSR callback`, and no second account was used to inspect the sender-side viewer list. After closing the Story the foreground activity became `LoginActivity`, which currently blocks the Reels test until the feed is restored.
+- `limitations`: one Story was exercised in this earlier `1.2.19` run. The log did not show `receipt mutation` or `FeedCSR callback`, and no second account was used to inspect the sender-side viewer list. Facebook temporarily foregrounded `LoginActivity`; a later launch returned the MuMu session to the feed.
 
 ### E-008 — Model/cache seen transaction and MuMu suppression
 
@@ -117,6 +117,13 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
   - After closing the tested Story, its card remained in the tray with a blue unseen ring.
 - `content_hash`: Facebook APK hash inherited from E-001; tested module hash is E-005.
 - `limitations`: one MuMu Story path confirmed; the Facebook server's separate viewer list and the `BQU.A0I` receipt path were not observed.
+
+### E-009 — MuMu Reels commerce-overlay sample
+
+- `source_ref`: MuMu Android 15, Facebook 582 patched APK from release `v1.2.20`, Reels search results and immersive viewer screenshots.
+- `repro_command`: open Reels search, search `Shopee`, open a result whose caption has a `Mua ngay` Shopee link, and inspect the immersive viewer without tapping the link or shop controls.
+- `raw_excerpt`: two Shopee-linked Reel results opened in the viewer. The video and caption link remained visible; no separate product attachment card appeared over the video. Thirteen ordinary Reels also remained viewable during feed sampling.
+- `limitations`: the sampled Shopee-linked Reel was not proven to carry the same structured `GroupCommerceProductItem` attachment as the user's screenshot. Static attachment-path evidence remains the basis for that specific product-card filter; this runtime sample only confirms the Reel and its caption were not removed.
 
 ## Findings
 
@@ -178,5 +185,6 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
 - 2026-10-18: installed MPro 1.2.19 on MuMu, confirmed `4/4` Story hooks, opened one Story and observed direct-mutation plus local-state suppression logs. Facebook returned to `LoginActivity` after closing; Reels runtime verification is pending feed access.
 - 2026-10-18: IDA and a pass-through MuMu observer traced `X.1yO.A0A(String)` to `setStoryAsSeen` / `updateSeenState`; the observer saw this event after Story view while the previous release let it continue.
 - 2026-10-18: added the fifth schema/signature hook, bumped to MPro 1.2.20, and verified on MuMu that the direct mutation and model/cache event were suppressed while the tested Story card remained blue. Release `v1.2.20` and the new module/APKs were published.
+- 2026-10-18: sampled Shopee-linked Reels on MuMu; the Reel and its caption stayed visible and no separate product attachment card appeared in those samples.
 
-MuMu runtime confirms direct-mutation and model/cache suppression for the tested Story path. This does not establish the sender-side viewer-list outcome or every Story path. Affiliate/product Reels remain untested. No message body, credentials, or account data were logged.
+MuMu runtime confirms direct-mutation and model/cache suppression for tested Story views. This does not establish the sender-side viewer-list outcome or every Story path. The exact product-tagged Reel from the user's screenshot was not found in the sampled feed, so its commerce card is supported by static attachment-path verification rather than a matching runtime reproduction. No message body, credentials, or account data were logged.
