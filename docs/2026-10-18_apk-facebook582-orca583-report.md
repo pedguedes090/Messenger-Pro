@@ -121,6 +121,14 @@ APK SHA-256: Facebook `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee9
   - The current DEX method catalogs contain many overloaded native `dispatchV*` declarations, but static references did not identify a receive action and payload layout that can safely configure `API_NOTIFICATION`.
 - `conclusion`: keep `MessageReceivedHook` disabled for build `346611418` unless an authorized runtime trace or a stronger static call path identifies the action and argument layout.
 
+### E-012 — APKs uploaded to the Hugging Face bucket
+
+- `source_ref`: public Hugging Face bucket `meetea/data`, prefix `patched/`.
+- `raw_excerpt`:
+  - `patched/Facebook-582-patched.apk`: 156,557,416 bytes; SHA-256 `d5506b6f8a5ab77d1e9dc8150bf58b234a8ea74b48b20b26e4dbb574408f0ff`.
+  - `patched/mPro-v1.2.13-debug.apk`: 10,036,326 bytes; SHA-256 `2cb6dd79511a25d9d5bc2194b7d0d084248e00e52a0bf7cce66652801917e5b8`.
+  - Both objects were downloaded back from the bucket and their sizes and SHA-256 digests matched the local build artifacts. Existing files under `original/` were left intact.
+
 ## Findings
 
 ### F-001 — Facebook 582 has a structural feed/Reels/Story Ads patch path
@@ -192,6 +200,7 @@ The product-Reel condition does not scan captions. A Reel that only mentions a p
 - 2026-10-18: MuMu `emulator-5554` became available. Facebook 582 and Messenger 583 were launched with the LSPosed module enabled; both remained alive at login surfaces. Messenger completed module unobfuscation; no authenticated feed/Reels or receive-event test was available.
 - 2026-10-18: generated Facebook 582 `classes2.dex` reopened in IDA; feed-filter drop and null/model fail-open control flow verified in the emitted bytecode.
 - 2026-10-18: Messenger 583 notification model and Rsys `onMessageReceived` callback inspected in IDA; neither provides a verified Mailbox receive action, so `API_NOTIFICATION` remains unset.
+- 2026-10-18: Facebook 582 patched APK and Messenger-Pro 1.2.13 debug APK uploaded to Hugging Face `meetea/data/patched/`; downloaded copies matched local SHA-256 digests.
 
 ## Runtime limits
 
