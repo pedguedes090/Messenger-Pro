@@ -67,8 +67,23 @@ APKSIGNER_BIN="$(find_android_tool apksigner APKSIGNER)" || {
 }
 KEYSTORE="${KS:-$HOME/.android/debug.keystore}"
 if [[ ! -f "$KEYSTORE" ]]; then
-  echo "Android debug keystore not found: $KEYSTORE" >&2
-  exit 2
+  KEYTOOL="${KEYTOOL:-$(command -v keytool || true)}"
+  if [[ -z "$KEYTOOL" && -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/keytool" ]]; then
+    KEYTOOL="$JAVA_HOME/bin/keytool"
+  fi
+  if [[ -z "$KEYTOOL" ]]; then
+    echo "Android debug keystore is missing and keytool was not found: $KEYSTORE" >&2
+    exit 2
+  fi
+  mkdir -p "$(dirname "$KEYSTORE")"
+  echo "Creating debug keystore for this build: $KEYSTORE"
+  "$KEYTOOL" -genkeypair -noprompt -storetype JKS \
+    -keystore "$KEYSTORE" \
+    -storepass "${KS_PASS:-android}" \
+    -keypass "${KEY_PASS:-android}" \
+    -alias "${KEY_ALIAS:-androiddebugkey}" \
+    -keyalg RSA -keysize 2048 -validity 10000 \
+    -dname "CN=Android Debug,O=Android,C=US"
 fi
 
 "$PYTHON" "$APK_TOOL" extract --apk "$INPUT" --outdir "$RAW_DEX"
