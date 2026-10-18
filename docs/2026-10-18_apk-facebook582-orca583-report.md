@@ -129,6 +129,26 @@ APK SHA-256: Facebook `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee9
   - `patched/mPro-v1.2.13-debug.apk`: 10,036,326 bytes; SHA-256 `2cb6dd79511a25d9d5bc2194b7d0d084248e00e52a0bf7cce66652801917e5b8`.
   - Both objects were downloaded back from the bucket and their sizes and SHA-256 digests matched the local build artifacts. Existing files under `original/` were left intact.
 
+### E-013 — Versioned original APK inputs uploaded for CI
+
+- `source_ref`: public Hugging Face bucket `meetea/data`, prefix `original/`.
+- `raw_excerpt`:
+  - `original/facebook-katana-582.0.0.50.54-475417168.apk`: 153,829,504 bytes; SHA-256 `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee97ad4f7b`.
+  - `original/messenger-orca-583.0.0.29.95-346611418.apk`: 164,966,828 bytes; SHA-256 `0d45dbea76f5b425047575634c21b50297684dbf596e9fc7cf9690584abd20a1`.
+  - Both were downloaded back and matched the supplied `apkdebug/` APKs byte-for-byte. Existing 576 inputs remain available.
+
+### E-014 — Patch-and-release workflow moved to the current APKs
+
+- `source_ref`: `.github/workflows/patch-release.yml`, `pipeline/fb/build_582_apk.sh`, and `pipeline/PIPELINE.md`.
+- `raw_excerpt`:
+  - Workflow source URLs now point to the versioned 583/582 APK inputs above; it no longer downloads or unpacks `facebook-576-18dex.zip`.
+  - Messenger 583 was successfully processed locally with the pinned MRVPatcher 5.8.1 command; output name `Messenger-mrv.apk` matched the workflow rename.
+  - `build_582_apk.sh` ran end-to-end under Git Bash against the supplied Facebook 582 APK, resolved and patched the four expected methods, zipaligned and signed output, and verified the v3 signature. Its output SHA-256 matched the existing `Facebook-582-patched.apk` artifact.
+  - MRVPatcher 5.8.1 accepted both the Messenger 583 APK and Facebook 582 patched APK and emitted MRV-signed APKs with the expected names.
+  - `apksigner` reported the same MRV certificate SHA-256 (`217d4345ad36c9dce82da6ad5494b7c68a84e1077893fe0eb9f14c428d3e259c`) for both release APKs.
+  - Workflow YAML parsed, the build script passed `bash -n`, and both public Hugging Face source URLs returned HTTP 200.
+- `limitations`: GitHub Actions itself was not dispatched and no GitHub release tag was created.
+
 ## Findings
 
 ### F-001 — Facebook 582 has a structural feed/Reels/Story Ads patch path
@@ -201,6 +221,7 @@ The product-Reel condition does not scan captions. A Reel that only mentions a p
 - 2026-10-18: generated Facebook 582 `classes2.dex` reopened in IDA; feed-filter drop and null/model fail-open control flow verified in the emitted bytecode.
 - 2026-10-18: Messenger 583 notification model and Rsys `onMessageReceived` callback inspected in IDA; neither provides a verified Mailbox receive action, so `API_NOTIFICATION` remains unset.
 - 2026-10-18: Facebook 582 patched APK and Messenger-Pro 1.2.13 debug APK uploaded to Hugging Face `meetea/data/patched/`; downloaded copies matched local SHA-256 digests.
+- 2026-10-18: Original Facebook 582 and Messenger 583 inputs uploaded under `meetea/data/original/`; SHA-256 digests matched the supplied APKs. `patch-release.yml` and the Facebook 582 Linux build driver were updated and locally exercised.
 
 ## Runtime limits
 

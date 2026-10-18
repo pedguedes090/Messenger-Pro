@@ -1,4 +1,4 @@
-name: Patch & Release (Messenger + Facebook)
+name: Patch & Release (Messenger 583 + Facebook 582)
 
 on:
   workflow_dispatch:
@@ -10,9 +10,8 @@ permissions:
   contents: write
 
 env:
-  MESSENGER_URL: https://huggingface.co/buckets/meetea/data/resolve/original/com.facebook.orca_576.0.0.47.92-345212652_minAPI28%28arm64-v8a%29%28nodpi%29_apkmirror.com.apk
-  FACEBOOK_URL: https://huggingface.co/buckets/meetea/data/resolve/original/com.facebook.katana_576.0.0.42.73-474227017_1dpi_ff384da02235462f96b29bfdb2c3f247_apkmirror.com.apkm
-  FB_DEX_URL: https://huggingface.co/buckets/meetea/data/resolve/original/facebook-576-18dex.zip
+  MESSENGER_URL: https://huggingface.co/buckets/meetea/data/resolve/original/messenger-orca-583.0.0.29.95-346611418.apk
+  FACEBOOK_URL: https://huggingface.co/buckets/meetea/data/resolve/original/facebook-katana-582.0.0.50.54-475417168.apk
   MRVPATCHER_URL: https://github.com/NeonOrbit/MRVPatcher/releases/download/5.8.1/MRVPatcher-5.8.1.jar
   CHATHEAD_URL: https://github.com/NeonOrbit/ChatHeadEnabler/releases/download/v2.4.7/ChatHeadEnabler-v2.4.7.apk
 
@@ -40,58 +39,57 @@ jobs:
 
       # --- 1. build module ---
       - name: Build module APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew clean testDebugUnitTest lintDebug assembleDebug
 
       # --- 2. download inputs ---
       - name: Download inputs
         run: |
-          mkdir -p in out out-debug
+          mkdir -p in out
           curl -fsSL --retry 3 -o in/Messenger.apk "$MESSENGER_URL"
-          curl -fsSL --retry 3 -o in/Facebook.apkm "$FACEBOOK_URL"
-          curl -fsSL --retry 3 -o in/fb-dex.zip "$FB_DEX_URL"
+          curl -fsSL --retry 3 -o in/Facebook.apk "$FACEBOOK_URL"
           curl -fsSL --retry 3 -o in/MRVPatcher.jar "$MRVPATCHER_URL"
           curl -fsSL --retry 3 -o in/ChatHeadEnabler-v2.4.7.apk "$CHATHEAD_URL"
-          mkdir -p in/fb-dex
-          unzip -o -q in/fb-dex.zip -d in/fb-dex/
 
-      # --- 3. patch Messenger (MRV) ---
+      # --- 3. patch Messenger 583 (MRV) ---
       - name: Patch Messenger
         run: |
-          java -jar in/MRVPatcher.jar in/Messenger.apk -o out -f --modules tn.amin.mpro2
-          mv out/Messenger-mrv.apk out/Messenger-v576.0.0.47.92.apk
+          mkdir -p out/messenger-mrv
+          java -jar in/MRVPatcher.jar in/Messenger.apk -o out/messenger-mrv -f --modules tn.amin.mpro2
+          mv out/messenger-mrv/Messenger-mrv.apk out/Messenger-v583.0.0.29.95.apk
 
-      # --- 4a. Facebook MRV-signed ---
-      - name: Patch Facebook (MRV)
+      # --- 4. patch Facebook 582 DEX and build an installable APK ---
+      - name: Patch Facebook 582
         run: |
-          export FB_APKM="$PWD/in/Facebook.apkm"
-          export FB_DEXDIR="$PWD/in/fb-dex"
-          export MRV_JAR="$PWD/in/MRVPatcher.jar"
-          export OUT_DIR="$PWD/out"
-          export WORK="$PWD/work-fb"
-          bash pipeline/fb/run.sh
-          mv out/final_unsigned-mrv.apk out/Facebook-v576.0.0.42.73.apk
+          bash pipeline/fb/build_582_apk.sh in/Facebook.apk out/Facebook-582-clean.apk
 
-      # --- 5. upload artifacts ---
+      # --- 5. MRV-sign the patched Facebook APK ---
+      - name: MRV patch Facebook 582
+        run: |
+          mkdir -p out/facebook-mrv
+          java -jar in/MRVPatcher.jar out/Facebook-582-clean.apk -p -o out/facebook-mrv -f
+          mv out/facebook-mrv/Facebook-582-clean-mrv.apk out/Facebook-v582.0.0.50.54.apk
+
+      # --- 6. upload artifacts ---
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: patched-apks
           path: |
             app/build/outputs/apk/debug/*.apk
-            out/Messenger-v576*.apk
-            out/Facebook-v576*.apk
-            out/Facebook-576-clean.apk
+            out/Messenger-v583*.apk
+            out/Facebook-v582*.apk
+            out/Facebook-582-clean.apk
             in/ChatHeadEnabler-v2.4.7.apk
 
-      # --- 6. create release on tag ---
+      # --- 7. create release on tag ---
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             app/build/outputs/apk/debug/mPro-v*-debug.apk
-            out/Messenger-v576*.apk
-            out/Facebook-v576*.apk
-            out/Facebook-576-clean.apk
+            out/Messenger-v583*.apk
+            out/Facebook-v582*.apk
+            out/Facebook-582-clean.apk
             in/ChatHeadEnabler-v2.4.7.apk
           generate_release_notes: true

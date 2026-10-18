@@ -1,5 +1,26 @@
 # MessengerPro pipeline
 
+## Current automated release (Facebook 582 / Messenger 583)
+
+`.github/workflows/patch-release.yml` now uses the versioned original APKs in the
+Hugging Face bucket and produces release artifacts for these targets:
+
+| App | Package | Version | versionCode | Bucket input |
+|-----|---------|---------|-------------|--------------|
+| Messenger | `com.facebook.orca` | 583.0.0.29.95 | **346611418** | `original/messenger-orca-583.0.0.29.95-346611418.apk` |
+| Facebook | `com.facebook.katana` | 582.0.0.50.54 | **475417168** | `original/facebook-katana-582.0.0.50.54-475417168.apk` |
+
+The workflow builds and tests the module, MRV-patches Messenger 583, runs
+`fb/build_582_apk.sh` to patch the four verified Facebook DEX files, then MRV
+patches/signs the Facebook APK. It no longer uses the Facebook 576 Superpack
+DEX archive. The legacy 576 driver and details below remain available.
+
+Hugging Face bucket: <https://huggingface.co/buckets/meetea/data>
+
+---
+
+## Legacy 576 pipeline
+
 Automates building and patching **Messenger 576** and **Facebook 576** so a
 release ships three pre-patched APKs:
 
@@ -15,7 +36,7 @@ state is shared.
 
 ---
 
-## Targets (versions to download)
+### Targets (versions to download)
 
 The CI cannot download these from APKMirror (Cloudflare blocks the runner), so
 they must be downloaded manually and hosted on your own file host. The workflow
