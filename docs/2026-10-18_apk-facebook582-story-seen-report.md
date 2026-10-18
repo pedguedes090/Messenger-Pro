@@ -3,11 +3,11 @@
 > Analysis date: 2026-10-18
 > Flavor: null — authorized APK reverse engineering and source compatibility work.
 > Scope and authorization: [scope summary](2026-10-18_apk-facebook582-story-seen-scope.md).
-> Result status: target resolution/build are verified; one MuMu Story runtime exercised the direct mutation and local-state blockers. The receipt-sender callback and Reels product overlay still need runtime observation.
+> Result status: target resolution/build are verified; MuMu runtime confirms direct-mutation and model/cache suppression for Story seen state. The receipt-sender callback and Reels product overlay still need runtime observation.
 
 ## Executive summary
 
-Facebook 582 has more than one Story “seen” path: a direct `DirectSeenMutation`, a seen-receipts mutation, a feed CSR callback, and a local state writer. The previous receipt hook searched for the GraphQL model name `StorySeenReceiptsSeenTimeUpdateMutation`, which resolves to a constructor and is not loadable as a reflective `Method`; the actual sender is `X.BQU.A0I`. The implementation now resolves the sender by its stable input-field set and validates the method signature, while also tightening the direct mutation and callback selectors. On MuMu, LSPosed installed all four hooks; opening and closing one Story produced suppression logs for the direct mutation and local state writer. The clean module build, tests, lint, signature check, GitHub release workflow, and Hugging Face uploads also succeeded. The receipt-sender callback and Reels product overlay still need runtime observation.
+Facebook 582 has several Story “seen” paths: a direct `DirectSeenMutation`, a seen-receipts mutation, a feed CSR callback, a local database writer, and a model/cache transaction. The previous receipt hook searched for the GraphQL model name `StorySeenReceiptsSeenTimeUpdateMutation`, which resolves to a constructor rather than the sender. Runtime diagnosis found that `X.1yO.A0A(String)` dispatches `setStoryAsSeen` and `updateSeenState`; the previous release let this model/cache transaction continue even when other seen hooks fired. The new release hooks this path by a narrow schema/signature fingerprint. On MuMu, the new hook logged suppression and the tested Story card remained in the feed with its unseen ring. The clean module build, tests, lint, signature check, GitHub release workflow, and Hugging Face uploads succeeded. The server receipt-sender callback and Reels product overlay still need runtime observation.
 
 ## Target and source changes
 
@@ -16,10 +16,10 @@ Facebook 582 has more than one Story “seen” path: a direct `DirectSeenMutati
 | APK | `com.facebook.katana_582.0.0.50.54-475417168_minAPI30(arm64-v8a)(560,640dpi)_apkmirror.com.apk` |
 | Package / version | `com.facebook.katana` / `582.0.0.50.54` / code `475417168` |
 | APK SHA-256 | `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee97ad4f7b` |
-| Module output | `mPro-v1.2.19-debug.apk`, code `36`, name `1.2.19` |
-| Main commit / release | `859024d742098cda8db4e34b0b576225d3fe56ea` / [`v1.2.19`](https://github.com/pedguedes090/Messenger-Pro/releases/tag/v1.2.19) |
+| Module output | `mPro-v1.2.20-debug.apk`, code `37`, name `1.2.20` |
+| Code commit / release | `5cd78980c451be3daa4615f9e2c5176a0b3ab57f` / [`v1.2.20`](https://github.com/pedguedes090/Messenger-Pro/releases/tag/v1.2.20) |
 
-Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySeenFingerprint.java`, and its unit test. The same release also contains the already-authorized Messenger 583 dispatch fix and its regression tests.
+Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySeenFingerprint.java`, and its unit tests. The same release also contains the already-authorized Messenger 583 dispatch fix and its regression tests.
 
 ## Static evidence
 
@@ -79,14 +79,14 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
   .\gradlew.bat clean testDebugUnitTest lintDebug assembleDebug
   ```
 
-- `raw_excerpt`: `BUILD SUCCESSFUL`; unit tests `15`, failures/errors `0`; `lintDebug` passed. `aapt dump badging` reports module version `1.2.19` / code `36`; `apksigner verify --verbose` reports v2 verification true and exit code `0`.
-- `content_hash`: module APK SHA-256 `feafba0eb5e7f732ffc03135c15bd9aa4588947d0cd6aa4e21a61425e3b96b8c`.
+- `raw_excerpt`: `BUILD SUCCESSFUL`; unit tests `15`, failures/errors `0`; `lintDebug` passed. `aapt dump badging` reports module version `1.2.20` / code `37`; `apksigner verify --verbose` reports v2 verification true and exit code `0`.
+- `content_hash`: module APK SHA-256 `2ef2caaceaa12bcf3c2490572c8523cafd2ebafc401020b4b13c2a055bccd57b8`.
 
 ### E-006 — Published artifacts
 
-- `source_ref`: GitHub Actions run `39108787650`, GitHub Release `v1.2.19`, and Hugging Face bucket `meetea/data/patched/`.
-- `repro_command`: `gh run view 39108787650 --json status,conclusion,jobs`; `gh release view v1.2.19 --json assets`; `hf buckets list meetea/data --recursive --format json`.
-- `raw_excerpt`: all workflow steps succeeded. Release assets contain Facebook 582, Messenger 583, and the local-signed module APK. Bucket entries report the new sizes: Facebook `158536311`, Messenger `168461379`, module `10040746` bytes.
+- `source_ref`: GitHub Actions run `39115851043`, GitHub Release `v1.2.20`, and Hugging Face bucket `meetea/data/patched/`.
+- `repro_command`: `gh run view 39115851043 --json status,conclusion,jobs`; `gh release view v1.2.20 --json assets`; `hf buckets list meetea/data --recursive --format json`.
+- `raw_excerpt`: all workflow steps succeeded. Release assets contain Facebook 582, Messenger 583, and the local-signed module APK. Bucket entries report the new sizes: Facebook `158536311`, Messenger `168461379`, module `10041718` bytes.
 - `limitations`: bucket metadata and CLI upload completion were checked; no download-back digest verification was run for the three new bucket objects.
 
 ### E-007 — MuMu Story runtime dispatch
@@ -107,6 +107,17 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
   - Startup log: `FacebookHook: installed 4/4 targeted Story seen hooks`.
 - `limitations`: one Story was exercised. The log did not show `receipt mutation` or `FeedCSR callback`, and no second account was used to inspect the sender-side viewer list. After closing the Story the foreground activity became `LoginActivity`, which currently blocks the Reels test until the feed is restored.
 
+### E-008 — Model/cache seen transaction and MuMu suppression
+
+- `source_ref`: Facebook 582 `classes2.dex`, IDA Pro at `_1yO.A0A@VL` (`0x731ea0`), plus MuMu log output from MPro 1.2.20.
+- `repro_command`: inspect IDA function `0x731ea0` and its xrefs; then open and close a fresh Story under MPro 1.2.20 and filter `LSPosed-Bridge` for `Story model seen-state`.
+- `raw_excerpt`:
+  - IDA prototype: `void(X.1yO *this, java.lang.String *p0)`; the body references `_updateSeenState`, `primaryKey`, `setStoryAsSeen`, `setStorySeen`, and `updateSeenState`.
+  - MuMu installed `X.1yO#A0A(java.lang.String)->void` as the fifth Story hook (`5/5`). At `16:31:45.085` the direct mutation was suppressed; at `16:31:46.000`, `.003`, and `.010` the model/cache seen-state transaction was suppressed.
+  - After closing the tested Story, its card remained in the tray with a blue unseen ring.
+- `content_hash`: Facebook APK hash inherited from E-001; tested module hash is E-005.
+- `limitations`: one MuMu Story path confirmed; the Facebook server's separate viewer list and the `BQU.A0I` receipt path were not observed.
+
 ## Findings
 
 ### F-001 — The old receipt hook resolved a model constructor, not a sender
@@ -120,15 +131,26 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
 - `confidence`: high for the static mapping; runtime behavior remains unverified.
 - `remediation`: resolve and hook `BQU.A0I` using the four stable input fields and its void/four-parameter signature.
 
-### F-002 — Story seen suppression now has four narrow, fail-open targets
+### F-002 — The previous release missed a model/cache seen-state event
+
+- `severity`: n/a_re
+- `category`: design
+- `status`: validated (static call flow and MuMu observer log)
+- `evidence_ids`: [E-008]
+- `location`: Facebook 582 `X.1yO.A0A(String)` at classes2.dex `0x731ea0`
+- `impact`: the method dispatches `setStoryAsSeen`, `setStorySeen`, and `updateSeenState`. The previous four hooks blocked the direct mutation and some local persistence paths, but did not stop this model/cache transaction from changing the Story tray state.
+- `confidence`: high that the transaction was called in a MuMu Story run; the exact user-reported “seen” visual state was not reproduced with the previous release in the isolated test.
+- `remediation`: add a narrow fifth hook using all stable event strings and the `void(String)` signature.
+
+### F-003 — Story seen suppression now has five narrow, fail-open targets
 
 - `severity`: n/a_re
 - `category`: reverse_algo
-- `status`: validated on MuMu for one Story's direct mutation and local-state paths; receipt-sender behavior not observed
-- `evidence_ids`: [E-002, E-003, E-004, E-005, E-007]
+- `status`: validated on MuMu for direct-mutation and model/cache suppression; receipt-sender behavior not observed
+- `evidence_ids`: [E-002, E-003, E-004, E-005, E-007, E-008]
 - `location`: `app/src/main/java/tn/amin/mpro2/FacebookHook.java` and `KatanaUnobfuscator.java`
-- `impact`: hooks suppress the direct mutation, receipt sender, CSR state callback, and local seen-state writer. The former hook that returned null from every declared method of a helper class was removed to avoid damaging unrelated Story viewer behavior.
-- `confidence`: high that the direct mutation and local-state hooks fired in the MuMu run; server-side receipt-list outcome and alternate receipt sender behavior remain unverified.
+- `impact`: the hook set targets the direct mutation, receipt sender, CSR state callback, local database writer, and model/cache event `X.1yO.A0A`. The former hook that returned null from every declared method of a helper class was removed to avoid damaging unrelated Story viewer behavior.
+- `confidence`: high that direct and model/cache suppression fired in the MuMu run; server-side receipt-list outcome and alternate receipt sender behavior remain unverified.
 - `remediation`: on resolver mismatch the hook is skipped, a bounded diagnostic is logged, and Facebook remains fail-open.
 
 ## Call path
@@ -142,9 +164,10 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
   1. Story viewer prepares `DirectSeenMutation` through `BFm.A00` → `BFm.getRequest` — E-002, F-002.
   2. Receipt update is assembled and submitted through `BQU.A0I` — E-003, F-001, F-002.
   3. Feed CSR callback `24A.ExO(String)` and local writer `6ku.A03(...):int` are separately resolved to prevent secondary local state updates — E-004, F-002.
-  4. On MuMu, opening/closing one Story logged suppression through the direct mutation and local state hooks — E-007, F-002.
-  5. `FacebookHook` installs only methods that pass the schema and signature checks; missing targets are skipped with diagnostics — E-005, F-002.
-- `residual_risks`: `BQU.A0I` and `24A.ExO` were installed but did not log invocation in this single Story run; the server-side viewer list was not observed. A future Facebook schema may change the field set or sender method.
+  4. Model/cache handler `1yO.A0A(String)` emits `setStoryAsSeen` and `updateSeenState`; the new fingerprint resolves only the void/String event transaction — E-008, F-003.
+  5. On MuMu, opening/closing one Story logged suppression through the direct mutation and model/cache hooks; the Story card retained its blue unseen ring — E-008, F-003.
+  6. `FacebookHook` installs only methods that pass the schema and signature checks; missing targets are skipped with diagnostics — E-005, F-003.
+- `residual_risks`: `BQU.A0I` and `24A.ExO` were installed but did not log invocation in the observed Story run; the server-side viewer list was not observed. A future Facebook schema may change the field set or sender method.
 
 ## Timeline and runtime limits
 
@@ -153,5 +176,7 @@ Changed files: `FacebookHook.java`, `KatanaUnobfuscator.java`, `FacebookStorySee
 - 2026-10-18: implemented scoped selectors, removed the all-method helper hook, added bounded diagnostics and fingerprint tests; clean Gradle build, tests, and lint passed.
 - 2026-10-18: pushed commit `859024d`, created release `v1.2.19`, and uploaded the patched APKs and module to Hugging Face.
 - 2026-10-18: installed MPro 1.2.19 on MuMu, confirmed `4/4` Story hooks, opened one Story and observed direct-mutation plus local-state suppression logs. Facebook returned to `LoginActivity` after closing; Reels runtime verification is pending feed access.
+- 2026-10-18: IDA and a pass-through MuMu observer traced `X.1yO.A0A(String)` to `setStoryAsSeen` / `updateSeenState`; the observer saw this event after Story view while the previous release let it continue.
+- 2026-10-18: added the fifth schema/signature hook, bumped to MPro 1.2.20, and verified on MuMu that the direct mutation and model/cache event were suppressed while the tested Story card remained blue. Release `v1.2.20` and the new module/APKs were published.
 
-One MuMu Story exercised the direct mutation and local-state blockers. This does not establish the sender-side viewer-list outcome or every Story path. Affiliate/product Reels were not tested because Facebook is currently foregrounded in `LoginActivity`; restoring the logged-in feed is required. No message body, credentials, or account data were logged.
+MuMu runtime confirms direct-mutation and model/cache suppression for the tested Story path. This does not establish the sender-side viewer-list outcome or every Story path. Affiliate/product Reels remain untested. No message body, credentials, or account data were logged.
