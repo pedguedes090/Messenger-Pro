@@ -6,7 +6,7 @@
 
 ## Executive summary
 
-The repository now accepts Messenger Orca build `346611418` and recommends `583.0.0.29.95`. Facebook 582 static ad patching now uses model/category and render-path fingerprints instead of the old 576 obfuscated descriptors. It filters paid/sponsored feed edges, commerce-product Reels, the sponsored Reels pool, VideoHome ad requests, and the separate Story Ads fetch path. The generated DEX patch test and the clean Android build, unit tests, and lint pass.
+The repository now accepts Messenger Orca build `346611418` and recommends `583.0.0.29.95`. Facebook 582 static ad patching now uses model/category and render-path fingerprints instead of the old 576 obfuscated descriptors. It filters paid/sponsored feed edges, commerce-product Reels, the sponsored Reels pool, VideoHome ad requests, and the separate Story Ads fetch path. The generated DEX patch test passes; IDA inspection of the emitted `classes2.dex` confirms the feed filter’s drop and fail-open branches. The clean Android build, unit tests, and lint pass.
 
 MuMu Android 15 was available for launch smoke checks. Facebook 582 and Messenger 583 both reached their login surfaces with LSPosed loading the module; Messenger completed module unobfuscation without a crash, while Facebook remained alive after launching the patched APK. The emulator had no logged-in account, so feed/Reels ad-removal behavior and incoming-message dispatch could not be exercised. The Messenger 583 receive action is unresolved; the hook stays disabled by default for that build until `API_NOTIFICATION` is verified.
 
@@ -100,6 +100,62 @@ APK SHA-256: Facebook `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee9
   - Both the module and patched Facebook APK installed successfully on MuMu (`adb install -r` / packaging script `-Install`).
 - `limitations`: Facebook APK is signed with the local Android debug key, so it cannot update an official-signature install. The Messenger APK re-signed for the emulator is test-only and is not included as a release artifact.
 
+### E-010 — Patched Facebook feed-filter bytecode
+
+- `source_ref`: generated Facebook 582 `classes2.dex` at `app/build/outputs/fb/Facebook-582-patched.apk`; extracted DEX inspected with IDA session `a464e5a6`.
+- `repro_command`: open the patched `classes2.dex` in IDA and analyze `_1xD.addNewEdgeToCollection@ZLLL` at `0x693888`.
+- `raw_excerpt`:
+  - IDA prototype: `boolean(X.1xD *this, ImmutableList$Builder *p0, GraphQLFeedUnitEdge *p1, X.1aL *p2)`.
+  - The emitted prefix reads `GraphQLFeedUnitEdge.A03()` and `B8S()`. Null edge, feed-unit, or category branches jump to `0x693940`, the original method body.
+  - `GraphQLFBMultiAdsFeedUnit` and enum names `SPONSORED`, `PROMOTION`, `SHOWCASE`, `FIXED_POSITION`, and `HIGH_VALUE_PROMOTION` branch to `0x69393C`, which returns `false` before the builder is mutated.
+  - The `FB_SHORTS` branch requires `GraphQLStory`, calls `LX/3mA.A01(GraphQLStory)`, and returns `false` only when the commerce attachment result is non-null. Other Shorts and other categories continue through the original body.
+- `limitations`: bytecode/control-flow verification is static. A logged-in feed/Reels session is still required to prove Facebook’s live server data reaches these model paths.
+
+### E-011 — Messenger 583 notification model is not a verified JNI action
+
+- `source_ref`: Messenger 583 `classes2.dex` and `classes4.dex`, IDA sessions `56552941` and `666cbf4d`.
+- `repro_command`: enumerate `MailboxCoreJNI` / `MailboxSDKJNI` method descriptors and inspect `NewMessageNotification` and `onMessageReceived` methods in IDA.
+- `raw_excerpt`:
+  - `NewMessageNotification._init_` at classes4.dex `0x5ce33c` has prototype `void(NewMessageNotification, MessengerAccountType, Message, ThreadSummary, ..., flags...)`; it stores a `Message` and thread key as fields. This confirms the Android notification model, not a native dispatch action ID.
+  - `_80P.onMessageReceived` at classes4.dex `0x559780` takes `com.facebook.rsys.transport.gen.SignalingMessage` and records a `MessageReceiver.onMessageReceived` metric. It is a Rsys signaling callback, not evidence for a Mailbox chat-message action.
+  - The current DEX method catalogs contain many overloaded native `dispatchV*` declarations, but static references did not identify a receive action and payload layout that can safely configure `API_NOTIFICATION`.
+- `conclusion`: keep `MessageReceivedHook` disabled for build `346611418` unless an authorized runtime trace or a stronger static call path identifies the action and argument layout.
+
+### E-012 — APKs uploaded to the Hugging Face bucket
+
+- `source_ref`: public Hugging Face bucket `meetea/data`, prefix `patched/`.
+- `raw_excerpt`:
+  - `patched/Facebook-582-patched.apk`: 156,557,416 bytes; SHA-256 `d5506b6f8a5ab77d1e9dc8150bf58b234a8ea74b48b20b26e4dbb574408f0ff`.
+  - `patched/mPro-v1.2.13-debug.apk`: 10,036,326 bytes; SHA-256 `2cb6dd79511a25d9d5bc2194b7d0d084248e00e52a0bf7cce66652801917e5b8`.
+  - Both objects were downloaded back from the bucket and their sizes and SHA-256 digests matched the local build artifacts. Existing files under `original/` were left intact.
+
+### E-013 — Versioned original APK inputs uploaded for CI
+
+- `source_ref`: public Hugging Face bucket `meetea/data`, prefix `original/`.
+- `raw_excerpt`:
+  - `original/facebook-katana-582.0.0.50.54-475417168.apk`: 153,829,504 bytes; SHA-256 `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee97ad4f7b`.
+  - `original/messenger-orca-583.0.0.29.95-346611418.apk`: 164,966,828 bytes; SHA-256 `0d45dbea76f5b425047575634c21b50297684dbf596e9fc7cf9690584abd20a1`.
+  - Both were downloaded back and matched the supplied `apkdebug/` APKs byte-for-byte. Existing 576 inputs remain available.
+
+### E-014 — Patch-and-release workflow moved to the current APKs
+
+- `source_ref`: `.github/workflows/patch-release.yml`, `pipeline/fb/build_582_apk.sh`, and `pipeline/PIPELINE.md`.
+- `raw_excerpt`:
+  - Workflow source URLs now point to the versioned 583/582 APK inputs above; it no longer downloads or unpacks `facebook-576-18dex.zip`.
+  - Messenger 583 was successfully processed locally with the pinned MRVPatcher 5.8.1 command; output name `Messenger-mrv.apk` matched the workflow rename.
+  - `build_582_apk.sh` ran end-to-end under Git Bash against the supplied Facebook 582 APK, resolved and patched the four expected methods, zipaligned and signed output, and verified the v3 signature. Its output SHA-256 matched the existing `Facebook-582-patched.apk` artifact.
+  - MRVPatcher 5.8.1 accepted both the Messenger 583 APK and Facebook 582 patched APK and emitted MRV-signed APKs with the expected names.
+  - `apksigner` reported the same MRV certificate SHA-256 (`217d4345ad36c9dce82da6ad5494b7c68a84e1077893fe0eb9f14c428d3e259c`) for both release APKs.
+  - Workflow YAML parsed, the build script passed `bash -n`, and both public Hugging Face source URLs returned HTTP 200.
+- `limitations`: the workflow was dispatched and artifacts were built, but no GitHub release tag was created.
+
+### E-015 — GitHub Actions patch-release run
+
+- `source_ref`: GitHub Actions run `39098800740` on `codex/facebook-582-messenger-583-compat` at commit `1b1b5c1`.
+- `repro_command`: `gh workflow run patch-release.yml --ref codex/facebook-582-messenger-583-compat`.
+- `raw_excerpt`: `Build module APK`, `Download inputs`, `Patch Messenger`, `Patch Facebook 582`, `MRV patch Facebook 582`, and `Upload artifacts` all completed successfully. GitHub reported artifact `patched-apks`, 354,676,406 bytes. The `Create GitHub Release` step was skipped because the run was `workflow_dispatch` and no tag was pushed.
+- `repair`: the first CI attempt stopped because the clean runner had no debug keystore. `build_582_apk.sh` now creates a temporary JKS key with `keytool` when needed; the retry completed successfully.
+
 ## Findings
 
 ### F-001 — Facebook 582 has a structural feed/Reels/Story Ads patch path
@@ -169,6 +225,11 @@ The product-Reel condition does not scan captions. A Reel that only mentions a p
 - 2026-10-18: supplied APK manifests and DEX tables analyzed; Facebook feed, commerce, Reels, and Story Ads paths traced; Messenger native dispatch candidates inspected with IDA.
 - 2026-10-18: source and DEX patch profile updated; DEX test, clean Android build, unit tests, and lint passed.
 - 2026-10-18: MuMu `emulator-5554` became available. Facebook 582 and Messenger 583 were launched with the LSPosed module enabled; both remained alive at login surfaces. Messenger completed module unobfuscation; no authenticated feed/Reels or receive-event test was available.
+- 2026-10-18: generated Facebook 582 `classes2.dex` reopened in IDA; feed-filter drop and null/model fail-open control flow verified in the emitted bytecode.
+- 2026-10-18: Messenger 583 notification model and Rsys `onMessageReceived` callback inspected in IDA; neither provides a verified Mailbox receive action, so `API_NOTIFICATION` remains unset.
+- 2026-10-18: Facebook 582 patched APK and Messenger-Pro 1.2.13 debug APK uploaded to Hugging Face `meetea/data/patched/`; downloaded copies matched local SHA-256 digests.
+- 2026-10-18: Original Facebook 582 and Messenger 583 inputs uploaded under `meetea/data/original/`; SHA-256 digests matched the supplied APKs. `patch-release.yml` and the Facebook 582 Linux build driver were updated and locally exercised.
+- 2026-10-18: GitHub Actions run `39098800740` successfully built and uploaded the 582/583 artifacts from the updated workflow; release creation remained skipped because no tag was requested.
 
 ## Runtime limits
 
