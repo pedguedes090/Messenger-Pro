@@ -147,7 +147,14 @@ APK SHA-256: Facebook `e905b3aa93a9f8a42de0e7f38d4156c9e2121552d8217d511ce051ee9
   - MRVPatcher 5.8.1 accepted both the Messenger 583 APK and Facebook 582 patched APK and emitted MRV-signed APKs with the expected names.
   - `apksigner` reported the same MRV certificate SHA-256 (`217d4345ad36c9dce82da6ad5494b7c68a84e1077893fe0eb9f14c428d3e259c`) for both release APKs.
   - Workflow YAML parsed, the build script passed `bash -n`, and both public Hugging Face source URLs returned HTTP 200.
-- `limitations`: GitHub Actions itself was not dispatched and no GitHub release tag was created.
+- `limitations`: the workflow was dispatched and artifacts were built, but no GitHub release tag was created.
+
+### E-015 — GitHub Actions patch-release run
+
+- `source_ref`: GitHub Actions run `39098800740` on `codex/facebook-582-messenger-583-compat` at commit `1b1b5c1`.
+- `repro_command`: `gh workflow run patch-release.yml --ref codex/facebook-582-messenger-583-compat`.
+- `raw_excerpt`: `Build module APK`, `Download inputs`, `Patch Messenger`, `Patch Facebook 582`, `MRV patch Facebook 582`, and `Upload artifacts` all completed successfully. GitHub reported artifact `patched-apks`, 354,676,406 bytes. The `Create GitHub Release` step was skipped because the run was `workflow_dispatch` and no tag was pushed.
+- `repair`: the first CI attempt stopped because the clean runner had no debug keystore. `build_582_apk.sh` now creates a temporary JKS key with `keytool` when needed; the retry completed successfully.
 
 ## Findings
 
@@ -222,6 +229,7 @@ The product-Reel condition does not scan captions. A Reel that only mentions a p
 - 2026-10-18: Messenger 583 notification model and Rsys `onMessageReceived` callback inspected in IDA; neither provides a verified Mailbox receive action, so `API_NOTIFICATION` remains unset.
 - 2026-10-18: Facebook 582 patched APK and Messenger-Pro 1.2.13 debug APK uploaded to Hugging Face `meetea/data/patched/`; downloaded copies matched local SHA-256 digests.
 - 2026-10-18: Original Facebook 582 and Messenger 583 inputs uploaded under `meetea/data/original/`; SHA-256 digests matched the supplied APKs. `patch-release.yml` and the Facebook 582 Linux build driver were updated and locally exercised.
+- 2026-10-18: GitHub Actions run `39098800740` successfully built and uploaded the 582/583 artifacts from the updated workflow; release creation remained skipped because no tag was requested.
 
 ## Runtime limits
 
