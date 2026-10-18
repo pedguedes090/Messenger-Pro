@@ -90,7 +90,8 @@ fi
 
 patch_dex() {
   local name="$1"
-  local expected="$2"
+  local expected_targets="$2"
+  local expected_counts="$3"
   local source="$RAW_DEX/$name"
   local dest="$PATCHED_DEX/$name"
   local result
@@ -99,16 +100,22 @@ patch_dex() {
     return 1
   }
   printf '%s\n' "$result"
-  if ! grep -Fq "$expected" <<<"$result"; then
-    echo "unexpected Facebook 582 patch counts for $name" >&2
+  if ! grep -Fq "$expected_targets" <<<"$result" || ! grep -Fq "$expected_counts" <<<"$result"; then
+    echo "unexpected Facebook 582 patch targets or verification for $name" >&2
     return 1
   fi
 }
 
-patch_dex classes2.dex 'feedEdge=1 shortsPool=0 sponsoredSelector=1 videoAdRequest=0 storyAdFetch=0'
-patch_dex classes4.dex 'feedEdge=0 shortsPool=1 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=0'
-patch_dex classes7.dex 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=1'
-patch_dex classes13.dex 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=1 storyAdFetch=0'
+patch_dex classes2.dex \
+  'affiliateProductOverlay=false brandedAffiliateProductOverlay=false feedReelPreserved=true' \
+  'feedEdge=1 shortsPool=0 sponsoredSelector=1 videoAdRequest=0 storyAdFetch=0 affiliateOverlay=0 affiliateOverlayOutputsVerified=true'
+patch_dex classes4.dex 'shortsPool=true' \
+  'feedEdge=0 shortsPool=1 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=0'
+patch_dex classes7.dex 'storyAdFetch=true' \
+  'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=1'
+patch_dex classes13.dex \
+  'videoAdRequest=true storyAdFetch=false affiliateProductOverlay=true brandedAffiliateProductOverlay=true feedReelPreserved=true' \
+  'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=1 storyAdFetch=0 affiliateOverlay=2 affiliateOverlayOutputsVerified=true'
 
 "$PYTHON" "$APK_TOOL" replace --apk "$INPUT" --patch-dir "$PATCHED_DEX" --out "$UNSIGNED"
 "$ZIPALIGN_BIN" -f -p 4 "$UNSIGNED" "$ALIGNED"

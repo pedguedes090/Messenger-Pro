@@ -39,7 +39,7 @@ function Convert-ToMsysPath([string]$path) {
     return $p
 }
 
-function Invoke-Facebook582Patch([string]$name, [string]$expected) {
+function Invoke-Facebook582Patch([string]$name, [string]$expected, [string]$expectedCounts) {
     $input = Join-Path $rawDex $name
     $output = Join-Path $patchedDex $name
     $cmd = "'$(Convert-ToMsysPath $dexTool)' ads '$(Convert-ToMsysPath $input)' '$(Convert-ToMsysPath $output)' facebook-582"
@@ -47,14 +47,15 @@ function Invoke-Facebook582Patch([string]$name, [string]$expected) {
     if ($LASTEXITCODE -ne 0) { throw "DEX patch failed for $name`n$($result -join "`n")" }
     $text = $result -join "`n"
     if ($text -notmatch [regex]::Escape($expected)) { throw "Resolver did not confirm $name target`n$text" }
+    if ($expectedCounts -and $text -notmatch [regex]::Escape($expectedCounts)) { throw "Unexpected patch verification for $name`n$text" }
     if (-not (Test-Path -LiteralPath $output)) { throw "Patched DEX was not written: $output" }
     Write-Output $text
 }
 
-Invoke-Facebook582Patch 'classes2.dex' 'feedEdge=1 shortsPool=0 sponsoredSelector=1 videoAdRequest=0 storyAdFetch=0'
+Invoke-Facebook582Patch 'classes2.dex' 'affiliateProductOverlay=false brandedAffiliateProductOverlay=false feedReelPreserved=true' 'affiliateOverlay=0 affiliateOverlayOutputsVerified=true'
 Invoke-Facebook582Patch 'classes4.dex' 'feedEdge=0 shortsPool=1 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=0'
 Invoke-Facebook582Patch 'classes7.dex' 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=1'
-Invoke-Facebook582Patch 'classes13.dex' 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=1 storyAdFetch=0'
+Invoke-Facebook582Patch 'classes13.dex' 'videoAdRequest=true storyAdFetch=false affiliateProductOverlay=true brandedAffiliateProductOverlay=true feedReelPreserved=true' 'affiliateOverlay=2 affiliateOverlayOutputsVerified=true'
 
 & $pythonExe $zipTool replace --apk (Resolve-Path -LiteralPath $ApkPath).Path --patch-dir $patchedDex --out $unsigned
 if ($LASTEXITCODE -ne 0) { throw "Failed to assemble patched APK ($LASTEXITCODE)" }

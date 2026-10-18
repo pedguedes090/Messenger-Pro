@@ -34,8 +34,8 @@ function Invoke-Patch([string]$name, [string]$expectedTargets, [string]$expected
     Write-Output "$name`n$text"
 }
 
-Invoke-Patch 'classes2.dex' 'edgeFilter=true affiliateProductHelper=true' 'feedEdge=1 shortsPool=0 sponsoredSelector=1 videoAdRequest=0 storyAdFetch=0'
-Invoke-Patch 'classes4.dex' 'shortsPool=true' 'feedEdge=0 shortsPool=1 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=0'
-Invoke-Patch 'classes7.dex' 'storyAdFetch=true' 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=1'
-Invoke-Patch 'classes13.dex' 'videoAdRequest=true' 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=1 storyAdFetch=0'
+Invoke-Patch 'classes2.dex' 'affiliateProductOverlay=false brandedAffiliateProductOverlay=false feedReelPreserved=true' 'feedEdge=1 shortsPool=0 sponsoredSelector=1 videoAdRequest=0 storyAdFetch=0 affiliateOverlay=0 affiliateOverlayOutputsVerified=true'
+Invoke-Patch 'classes4.dex' 'shortsPool=true' 'feedEdge=0 shortsPool=1 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=0 affiliateOverlay=0 affiliateOverlayOutputsVerified=true'
+Invoke-Patch 'classes7.dex' 'storyAdFetch=true' 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=0 storyAdFetch=1 affiliateOverlay=0 affiliateOverlayOutputsVerified=true'
+Invoke-Patch 'classes13.dex' 'videoAdRequest=true storyAdFetch=false affiliateProductOverlay=true brandedAffiliateProductOverlay=true feedReelPreserved=true' 'feedEdge=0 shortsPool=0 sponsoredSelector=0 videoAdRequest=1 storyAdFetch=0 affiliateOverlay=2 affiliateOverlayOutputsVerified=true'
 Write-Output 'FACEBOOK_582_ADS_PATCH_TEST=PASS'

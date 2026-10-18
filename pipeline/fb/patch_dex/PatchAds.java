@@ -8,6 +8,8 @@ import org.jf.dexlib2.iface.MethodImplementation;
 import org.jf.dexlib2.iface.Field;
 import org.jf.dexlib2.iface.instruction.Instruction;
 import org.jf.dexlib2.iface.instruction.OffsetInstruction;
+import org.jf.dexlib2.iface.instruction.OneRegisterInstruction;
+import org.jf.dexlib2.iface.instruction.NarrowLiteralInstruction;
 import org.jf.dexlib2.iface.instruction.ReferenceInstruction;
 import org.jf.dexlib2.iface.ExceptionHandler;
 import org.jf.dexlib2.iface.TryBlock;
@@ -63,10 +65,7 @@ public class PatchAds {
     static final String IMMUTABLE_LIST = "Lcom/google/common/collect/ImmutableList;";
     static final String FEED_EDGE = "Lcom/facebook/graphql/model/GraphQLFeedUnitEdge;";
     static final String STORY = "Lcom/facebook/graphql/model/GraphQLStory;";
-    static final String STORY_ATTACHMENT = "Lcom/facebook/graphql/model/GraphQLStoryAttachment;";
     static final String MULTI_ADS = "Lcom/facebook/graphql/model/GraphQLFBMultiAdsFeedUnit;";
-    static final String STORY_COMMERCE_PLUGIN =
-            "Lcom/facebook/feed/rows/sections/content/FeedStoryGroupCommerceAttachmentPlugin;";
     static final String FEED_CATEGORY =
             "Lcom/crossapp/graphql/facebook/enums/GraphQLFeedStoryCategory;";
 
@@ -286,80 +285,6 @@ public class PatchAds {
         return result;
     }
 
-    private static Method findMethodDefinition(File root, File currentDex, MethodReference reference) throws Exception {
-        Method found = null;
-        for (File file : dexFiles(root, currentDex)) {
-            DexFile dex = DexFileFactory.loadDexFile(file, Opcodes.getDefault());
-            for (ClassDef cd : dex.getClasses()) {
-                if (!cd.getType().equals(reference.getDefiningClass())) continue;
-                for (Method method : cd.getMethods()) {
-                    if (method.getName().equals(reference.getName())
-                            && method.getReturnType().equals(reference.getReturnType())
-                            && method.getParameterTypes().equals(reference.getParameterTypes())) {
-                        if (found != null) return null;
-                        found = method;
-                    }
-                }
-            }
-        }
-        return found;
-    }
-
-    /**
-     * Resolve the commerce attachment predicate from the render plugin's call site,
-     * then require its implementation to contain the product-item type check.
-     */
-    private static MethodReference findProductAttachmentHelper(
-            File root, File currentDex, Collection<? extends ClassDef> currentClasses) throws Exception {
-        List<MethodReference> helperRefs = new ArrayList<MethodReference>();
-        ClassDef plugin = findClass(currentClasses, STORY_COMMERCE_PLUGIN);
-        if (plugin == null) {
-            for (File file : dexFiles(root, currentDex)) {
-                DexFile dex = DexFileFactory.loadDexFile(file, Opcodes.getDefault());
-                plugin = findClass(dex.getClasses(), STORY_COMMERCE_PLUGIN);
-                if (plugin != null) break;
-            }
-        }
-        if (plugin == null) return null;
-        for (Method method : plugin.getMethods()) {
-            MethodImplementation impl = method.getImplementation();
-            if (impl == null) continue;
-            for (Instruction instruction : impl.getInstructions()) {
-                if (!(instruction instanceof ReferenceInstruction)
-                        || !instruction.getOpcode().name().startsWith("INVOKE_STATIC")) continue;
-                Reference reference = ((ReferenceInstruction) instruction).getReference();
-                if (!(reference instanceof MethodReference)) continue;
-                MethodReference ref = (MethodReference) reference;
-                if (ref.getParameterTypes().size() == 1
-                        && ref.getParameterTypes().get(0).equals(STORY)
-                        && ref.getReturnType().equals(STORY_ATTACHMENT)
-                        && !helperRefs.contains(ref)) helperRefs.add(ref);
-            }
-        }
-        if (helperRefs.size() != 1) return null;
-        Method helper = findMethodDefinition(root, currentDex, helperRefs.get(0));
-        if (helper == null || helper.getImplementation() == null || !isStatic(helper)) return null;
-
-        List<MethodReference> predicateRefs = new ArrayList<MethodReference>();
-        for (Instruction instruction : helper.getImplementation().getInstructions()) {
-            if (!(instruction instanceof ReferenceInstruction)
-                    || !instruction.getOpcode().name().startsWith("INVOKE_STATIC")) continue;
-            Reference reference = ((ReferenceInstruction) instruction).getReference();
-            if (!(reference instanceof MethodReference)) continue;
-            MethodReference ref = (MethodReference) reference;
-            if (ref.getParameterTypes().size() == 1
-                    && ref.getParameterTypes().get(0).equals(STORY_ATTACHMENT)
-                    && ref.getReturnType().equals("Z") && !predicateRefs.contains(ref)) {
-                predicateRefs.add(ref);
-            }
-        }
-        if (predicateRefs.size() != 1) return null;
-        Method predicate = findMethodDefinition(root, currentDex, predicateRefs.get(0));
-        if (predicate == null || predicate.getImplementation() == null
-                || !hasString(predicate, "GroupCommerceProductItem")) return null;
-        return helperRefs.get(0);
-    }
-
     private static Method findUniqueFeedUnitGetter(ClassDef edge, ClassDef story, ClassDef multiAds) {
         if (edge == null || story == null || multiAds == null) return null;
         List<Method> candidates = new ArrayList<Method>();
@@ -414,8 +339,7 @@ public class PatchAds {
     }
 
     private static List<Instruction> modernFeedFilterPrefix(
-            Method method, Method feedUnitGetter, Method categoryGetter,
-            MethodReference commerceHelper) {
+            Method method, Method feedUnitGetter, Method categoryGetter) {
         PrefixBuilder b = new PrefixBuilder();
         int edgeReg = parameterRegister(method, 1);
         // Locals v0-v2 are unused at entry. Null/unknown model paths go to the
@@ -444,19 +368,9 @@ public class PatchAds {
         compareString(b, 1, 2, "FIXED_POSITION", "drop");
         compareString(b, 1, 2, "HIGH_VALUE_PROMOTION", "drop");
 
-        if (commerceHelper != null) {
-            compareString(b, 1, 2, "FB_SHORTS", "check_commerce");
-            b.branch(Opcode.GOTO, 0, "keep");
-            b.mark("check_commerce");
-            b.add(new ImmutableInstruction22c(Opcode.INSTANCE_OF, 2, 0,
-                    new ImmutableTypeReference(STORY)));
-            b.branch(Opcode.IF_EQZ, 2, "keep");
-            b.add(new ImmutableInstruction21c(Opcode.CHECK_CAST, 0,
-                    new ImmutableTypeReference(STORY)));
-            b.add(new ImmutableInstruction3rc(Opcode.INVOKE_STATIC_RANGE, 0, 1, commerceHelper));
-            b.add(new ImmutableInstruction11x(Opcode.MOVE_RESULT_OBJECT, 2));
-            b.branch(Opcode.IF_NEZ, 2, "drop");
-        }
+        // FB_SHORTS may contain a normal Reel with a removable product child.
+        // Preserve the feed edge; the specific affiliate attachment renderers are
+        // filtered independently in classes13.dex below.
         b.branch(Opcode.GOTO, 0, "keep");
         b.mark("drop");
         b.add(new ImmutableInstruction11n(Opcode.CONST_4, 0, 0));
@@ -524,6 +438,34 @@ public class PatchAds {
         return candidates.size() == 1 ? candidates.get(0) : null;
     }
 
+    private static boolean hasNullReturnBody(Method method) {
+        if (method == null || method.getImplementation() == null) return false;
+        List<Instruction> instructions = new ArrayList<Instruction>();
+        for (Instruction instruction : method.getImplementation().getInstructions()) {
+            instructions.add(instruction);
+        }
+        if (instructions.size() != 2
+                || instructions.get(0).getOpcode() != Opcode.CONST_4
+                || instructions.get(1).getOpcode() != Opcode.RETURN_OBJECT) return false;
+        Instruction setNull = instructions.get(0);
+        return setNull instanceof OneRegisterInstruction
+                && ((OneRegisterInstruction) setNull).getRegisterA() == 0
+                && setNull instanceof NarrowLiteralInstruction
+                && ((NarrowLiteralInstruction) setNull).getNarrowLiteral() == 0;
+    }
+
+    private static boolean outputMethodReturnsNull(File output, Method target) throws Exception {
+        if (target == null) return true;
+        DexFile dex = DexFileFactory.loadDexFile(output, Opcodes.getDefault());
+        for (ClassDef cd : dex.getClasses()) {
+            if (!cd.getType().equals(target.getDefiningClass())) continue;
+            for (Method method : cd.getMethods()) {
+                if (sameMethod(method, target)) return hasNullReturnBody(method);
+            }
+        }
+        return false;
+    }
+
     private static boolean hasType(Collection<? extends ClassDef> classes, String type) {
         return findClass(classes, type) != null;
     }
@@ -536,8 +478,6 @@ public class PatchAds {
         ClassDef multiAds = findClass(classes, MULTI_ADS);
         Method feedUnitGetter = findUniqueFeedUnitGetter(edge, story, multiAds);
         Method categoryGetter = findUniqueCategoryGetter(edge);
-        MethodReference commerceHelper = findProductAttachmentHelper(root, currentDex, classes);
-
         Method shortsPool = findUniqueAnchorMethod(classes, "fb_shorts_native_in_feed_unit",
                 "LX/5j9;", 4, false);
         Method sponsoredSelector = findUniqueAnchorMethod(classes, "get_top_valid_ad",
@@ -546,15 +486,21 @@ public class PatchAds {
                 "V", 1, false);
         Method storyAdFetch = findUniqueAnchorMethod(classes, "AdsPaginatingNetworkAdBucketFetcher",
                 "V", 4, false);
+        Method affiliateProductOverlay = findUniqueAnchorMethod(classes,
+                "FBShortsAffiliateLinkAttachmentComponent", "LX/1HX;", 1, false);
+        Method brandedAffiliateProductOverlay = findUniqueAnchorMethod(classes,
+                "FBShortsBrandFundedAffiliateLinkAttachmentComponent", "LX/1HX;", 1, false);
 
         boolean canFilterEdge = edgeInsertion != null && feedUnitGetter != null && categoryGetter != null;
-        int[] counts = new int[] {0, 0, 0, 0, 0};
+        int[] counts = new int[] {0, 0, 0, 0, 0, 0};
         System.out.println("facebook-582 targets: edgeFilter=" + canFilterEdge
-                + " affiliateProductHelper=" + (commerceHelper != null)
                 + " shortsPool=" + (shortsPool != null)
                 + " sponsoredSelector=" + (sponsoredSelector != null)
                 + " videoAdRequest=" + (videoAdRequest != null)
-                + " storyAdFetch=" + (storyAdFetch != null));
+                + " storyAdFetch=" + (storyAdFetch != null)
+                + " affiliateProductOverlay=" + (affiliateProductOverlay != null)
+                + " brandedAffiliateProductOverlay=" + (brandedAffiliateProductOverlay != null)
+                + " feedReelPreserved=true");
 
         DexPool pool = new DexPool(Opcodes.getDefault());
         for (ClassDef cd : classes) {
@@ -563,26 +509,30 @@ public class PatchAds {
             for (Method method : cd.getDirectMethods()) {
                 Method replacement = patchModernMethod(method, edgeInsertion, shortsPool,
                         sponsoredSelector, videoAdRequest, storyAdFetch, feedUnitGetter, categoryGetter,
-                        commerceHelper);
+                        affiliateProductOverlay, brandedAffiliateProductOverlay);
                 if (replacement != method) {
                     if (sameMethod(method, edgeInsertion)) counts[0]++;
                     else if (sameMethod(method, shortsPool)) counts[1]++;
                     else if (sameMethod(method, sponsoredSelector)) counts[2]++;
                     else if (sameMethod(method, videoAdRequest)) counts[3]++;
                     else if (sameMethod(method, storyAdFetch)) counts[4]++;
+                    else if (sameMethod(method, affiliateProductOverlay)
+                            || sameMethod(method, brandedAffiliateProductOverlay)) counts[5]++;
                 }
                 direct.add(replacement);
             }
             for (Method method : cd.getVirtualMethods()) {
                 Method replacement = patchModernMethod(method, edgeInsertion, shortsPool,
                         sponsoredSelector, videoAdRequest, storyAdFetch, feedUnitGetter, categoryGetter,
-                        commerceHelper);
+                        affiliateProductOverlay, brandedAffiliateProductOverlay);
                 if (replacement != method) {
                     if (sameMethod(method, edgeInsertion)) counts[0]++;
                     else if (sameMethod(method, shortsPool)) counts[1]++;
                     else if (sameMethod(method, sponsoredSelector)) counts[2]++;
                     else if (sameMethod(method, videoAdRequest)) counts[3]++;
                     else if (sameMethod(method, storyAdFetch)) counts[4]++;
+                    else if (sameMethod(method, affiliateProductOverlay)
+                            || sameMethod(method, brandedAffiliateProductOverlay)) counts[5]++;
                 }
                 virtual.add(replacement);
             }
@@ -591,24 +541,34 @@ public class PatchAds {
                     cd.getAnnotations(), cd.getStaticFields(), cd.getInstanceFields(), direct, virtual));
         }
         pool.writeTo(new FileDataStore(output));
+        boolean affiliateOverlayOutputsVerified = outputMethodReturnsNull(output, affiliateProductOverlay)
+                && outputMethodReturnsNull(output, brandedAffiliateProductOverlay);
+        if (!affiliateOverlayOutputsVerified) {
+            throw new IllegalStateException("Affiliate product overlay renderer output failed verification");
+        }
         System.out.println("facebook-582 patched methods: feedEdge=" + counts[0]
                 + " shortsPool=" + counts[1] + " sponsoredSelector=" + counts[2]
-                + " videoAdRequest=" + counts[3] + " storyAdFetch=" + counts[4]);
+                + " videoAdRequest=" + counts[3] + " storyAdFetch=" + counts[4]
+                + " affiliateOverlay=" + counts[5]
+                + " affiliateOverlayOutputsVerified=" + affiliateOverlayOutputsVerified);
         return counts;
     }
 
     private static Method patchModernMethod(Method method, Method edgeInsertion,
             Method shortsPool, Method sponsoredSelector, Method videoAdRequest, Method storyAdFetch,
-            Method feedUnitGetter, Method categoryGetter, MethodReference commerceHelper) {
+            Method feedUnitGetter, Method categoryGetter, Method affiliateProductOverlay,
+            Method brandedAffiliateProductOverlay) {
         if (edgeInsertion != null && sameMethod(method, edgeInsertion)) {
-            List<Instruction> prefix = modernFeedFilterPrefix(method, feedUnitGetter,
-                    categoryGetter, commerceHelper);
+            List<Instruction> prefix = modernFeedFilterPrefix(method, feedUnitGetter, categoryGetter);
             return prefixModernFeedFilter(method, prefix);
         }
         if (shortsPool != null && sameMethod(method, shortsPool)) return replaceWithNull(method);
         if (sponsoredSelector != null && sameMethod(method, sponsoredSelector)) return replaceWithNull(method);
         if (videoAdRequest != null && sameMethod(method, videoAdRequest)) return replaceWithVoid(method);
         if (storyAdFetch != null && sameMethod(method, storyAdFetch)) return replaceWithVoid(method);
+        if (affiliateProductOverlay != null && sameMethod(method, affiliateProductOverlay)) return replaceWithNull(method);
+        if (brandedAffiliateProductOverlay != null
+                && sameMethod(method, brandedAffiliateProductOverlay)) return replaceWithNull(method);
         return method;
     }
 
